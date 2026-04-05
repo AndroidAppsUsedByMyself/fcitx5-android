@@ -5,7 +5,6 @@
 package org.fcitx.fcitx5.android.core.data
 
 import org.fcitx.fcitx5.android.BuildConfig
-import org.fcitx.fcitx5.android.core.data.PluginDescriptor.Companion.pluginPackagePrefix
 
 /**
  * Metadata of a plugin, at `res/xml/plugin.xml`
@@ -37,8 +36,12 @@ data class PluginDescriptor(
     val name = packageName.removePrefix(pluginPackagePrefix).removeSuffix(pluginPackageSuffix)
 
     companion object {
-        const val pluginPackagePrefix = "org.fcitx.fcitx5.android.plugin."
-        const val pluginPackageSuffix = ".${BuildConfig.BUILD_TYPE}"
+        val pluginPackagePrefix: String by lazy {
+            "${BuildConfig.MAIN_APPLICATION_ID}.plugin."
+        }
+        val pluginPackageSuffix: String by lazy {
+            ".${BuildConfig.BUILD_TYPE}"
+        }
         const val pluginAPI = "0.1"
     }
 }

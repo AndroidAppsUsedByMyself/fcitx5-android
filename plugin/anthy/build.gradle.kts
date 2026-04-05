@@ -8,10 +8,10 @@ plugins {
 }
 
 android {
-    namespace = "org.fcitx.fcitx5.android.plugin.anthy"
+
 
     defaultConfig {
-        applicationId = "org.fcitx.fcitx5.android.plugin.anthy"
+
 
         @Suppress("UnstableApiUsage")
         externalNativeBuild {

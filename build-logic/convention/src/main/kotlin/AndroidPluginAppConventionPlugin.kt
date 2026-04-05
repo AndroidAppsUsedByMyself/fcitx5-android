@@ -15,24 +15,34 @@ import org.gradle.kotlin.dsl.configure
 class AndroidPluginAppConventionPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
+        val mainAppId = (target.findProperty("APP_ID") as? String) ?: "org.fcitx.fcitx5.android"
+        val pluginName = target.name.replace("-", "_")
+        val pluginAppId = (target.findProperty("APP_ID") as? String)?.let { "$it.plugin.$pluginName" }
+            ?: "org.fcitx.fcitx5.android.plugin.$pluginName"
+        val pluginNamespace = (target.findProperty("APP_ID") as? String)?.let { "$it.plugin.$pluginName" }
+            ?: "org.fcitx.fcitx5.android.plugin.$pluginName"
         target.extensions.configure<ApplicationExtension> {
             buildFeatures {
                 buildConfig = true
             }
+            namespace = pluginNamespace
+            defaultConfig {
+                applicationId = pluginAppId
+            }
             buildTypes {
                 release {
-                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"org.fcitx.fcitx5.android\"")
+                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"$mainAppId\"")
                     addManifestPlaceholders(
                         mapOf(
-                            "mainApplicationId" to "org.fcitx.fcitx5.android",
+                            "mainApplicationId" to mainAppId,
                         )
                     )
                 }
                 debug {
-                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"org.fcitx.fcitx5.android.debug\"")
+                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"$mainAppId.debug\"")
                     addManifestPlaceholders(
                         mapOf(
-                            "mainApplicationId" to "org.fcitx.fcitx5.android.debug",
+                            "mainApplicationId" to "$mainAppId.debug",
                         )
                     )
                 }
@@ -40,6 +50,13 @@ class AndroidPluginAppConventionPlugin : Plugin<Project> {
         }
         target.extensions.configure<ApplicationAndroidComponentsExtension> {
             onVariants { variant ->
+                variant.outputs.forEach { output ->
+                    if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
+                        val oldPrefix = "org.fcitx.fcitx5.android.plugin." + target.name.replace("-", "_")
+                        val newPrefix = mainAppId + ".plugin." + pluginName
+                        output.outputFileName.set(output.outputFileName.get().replace(oldPrefix, newPrefix))
+                    }
+                }
                 val variantName = variant.name.capitalized()
                 target.afterEvaluate {
                     val pluginsTaskName = "assemble${variantName}Plugins"

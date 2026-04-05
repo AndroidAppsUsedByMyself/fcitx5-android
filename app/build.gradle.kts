@@ -11,13 +11,15 @@ plugins {
 
 val appIdBase = "org.fcitx.fcitx5.android"
 val customAppId: String? = project.findProperty("APP_ID") as? String
+val mainApplicationId: String = customAppId ?: appIdBase
 
 android {
     namespace = "org.fcitx.fcitx5.android"
 
     defaultConfig {
-        applicationId = customAppId ?: appIdBase
+        applicationId = mainApplicationId
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        manifestPlaceholders["mainApplicationId"] = mainApplicationId
 
         @Suppress("UnstableApiUsage")
         externalNativeBuild {
@@ -39,16 +41,19 @@ android {
     buildFeatures {
         viewBinding = true
         resValues = true
+        buildConfig = true
     }
 
     buildTypes {
         release {
+            buildConfigField("String", "MAIN_APPLICATION_ID", "\"$mainApplicationId\"")
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round")
             resValue("string", "app_name", "@string/app_name_release")
             proguardFile("proguard-rules.pro")
         }
         debug {
+            buildConfigField("String", "MAIN_APPLICATION_ID", "\"$mainApplicationId\"")
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round_debug")
             resValue("string", "app_name", "@string/app_name_debug")
