@@ -4,8 +4,18 @@ plugins {
     alias(libs.plugins.gitVersion)
 }
 
+val mainAppId = (project.findProperty("APP_ID") as? String) ?: "org.fcitx.fcitx5.android"
+
 android {
     namespace = "org.fcitx.fcitx5.android.lib.plugin_base"
+
+    defaultConfig {
+        addManifestPlaceholders(
+            mapOf(
+                "mainApplicationId" to mainAppId
+            )
+        )
+    }
 
     publishing {
         // :lib:plugin_base contains different AndroidManifest.xml for debug and release variant

@@ -63,7 +63,7 @@ object ClearURLs {
             provider.redirections.forEach { redirection ->
                 redirection.matchAt(x, 0)?.groupValues?.getOrNull(1)?.let {
                     x = decodeURL(it)
-                    log(if (BuildConfig.DEBUG) "$url ~> $x" else "(redirect)")
+                    log("$url ~> $x")
                     return x
                 }
             }
@@ -89,7 +89,7 @@ object ClearURLs {
                 .toString()
         }
         if (matched) {
-            log(if (BuildConfig.DEBUG) "$url -> $x" else "(clear)")
+            log("$url -> $x")
         }
         return x
     }

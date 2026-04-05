@@ -8,10 +8,10 @@ plugins {
 }
 
 android {
-    namespace = "org.fcitx.fcitx5.android.plugin.sayura"
+
 
     defaultConfig {
-        applicationId = "org.fcitx.fcitx5.android.plugin.sayura"
+
 
         @Suppress("UnstableApiUsage")
         externalNativeBuild {
