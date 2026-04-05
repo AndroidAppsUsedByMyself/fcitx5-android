@@ -9,11 +9,14 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+val appIdBase = "org.fcitx.fcitx5.android"
+val customAppId: String? = project.findProperty("APP_ID") as? String
+
 android {
     namespace = "org.fcitx.fcitx5.android"
 
     defaultConfig {
-        applicationId = "org.fcitx.fcitx5.android"
+        applicationId = customAppId ?: appIdBase
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         @Suppress("UnstableApiUsage")
