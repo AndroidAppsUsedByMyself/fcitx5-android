@@ -63,6 +63,19 @@ class AndroidPluginAppConventionPlugin : Plugin<Project> {
                     val pluginsTask = target.rootProject.tasks.findByName(pluginsTaskName)
                         ?: target.rootProject.tasks.register(pluginsTaskName).get()
                     pluginsTask?.dependsOn(target.tasks.getByName("assemble${variantName}"))
+                    try {
+                        target.rootProject.project(":lib:plugin-base").extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+                            defaultConfig {
+                                addManifestPlaceholders(
+                                    mapOf(
+                                        "mainApplicationId" to "$mainAppId.debug"
+                                    )
+                                )
+                            }
+                        }
+                    } catch (e: Exception) {
+                        // ignore if not found
+                    }
                 }
             }
         }

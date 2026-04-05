@@ -4,15 +4,14 @@ plugins {
     alias(libs.plugins.gitVersion)
 }
 
-val mainAppId = (project.findProperty("APP_ID") as? String) ?: "org.fcitx.fcitx5.android"
-
 android {
     namespace = "org.fcitx.fcitx5.android.lib.plugin_base"
 
+    val mainAppId = (project.findProperty("APP_ID") as? String) ?: "org.fcitx.fcitx5.android"
     defaultConfig {
         addManifestPlaceholders(
             mapOf(
-                "mainApplicationId" to mainAppId
+                "mainApplicationId" to "$mainAppId.debug"
             )
         )
     }
