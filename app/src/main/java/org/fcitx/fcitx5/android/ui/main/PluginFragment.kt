@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.fcitx.fcitx5.android.R
@@ -24,9 +25,11 @@ import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.core.data.FileSource
 import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.utils.addCategory
 import org.fcitx.fcitx5.android.utils.addPreference
+import org.fcitx.fcitx5.android.utils.addSwitch
 
 class PluginFragment : PaddingPreferenceFragment() {
 
@@ -34,6 +37,7 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private lateinit var synced: DataManager.PluginSet
     private lateinit var detected: DataManager.PluginSet
+    private lateinit var enabledPlugins: Set<String>
 
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -62,6 +66,7 @@ class PluginFragment : PaddingPreferenceFragment() {
         DataManager.whenSynced {
             synced = DataManager.getSyncedPluginSet()
             detected = DataManager.detectPlugins()
+            enabledPlugins = AppPrefs.getInstance().internal.enabledPlugins.getValue()
             preferenceScreen = createPreferenceScreen()
         }
     }
@@ -71,6 +76,7 @@ class PluginFragment : PaddingPreferenceFragment() {
             val newDetected = DataManager.detectPlugins()
             if (detected != newDetected) {
                 detected = newDetected
+                enabledPlugins = AppPrefs.getInstance().internal.enabledPlugins.getValue()
                 preferenceScreen = createPreferenceScreen()
             }
         }
@@ -101,45 +107,59 @@ class PluginFragment : PaddingPreferenceFragment() {
         requireContext().unregisterReceiver(packageChangeReceiver)
     }
 
+    private fun updateEnabledPlugins(packageName: String, enabled: Boolean) {
+        val current = AppPrefs.getInstance().internal.enabledPlugins.getValue().toMutableSet()
+        if (enabled) {
+            current.add(packageName)
+        } else {
+            current.remove(packageName)
+        }
+        AppPrefs.getInstance().internal.enabledPlugins.setValue(current)
+        enabledPlugins = current
+        FcitxDaemon.restartFcitx()
+    }
+
     private fun createPreferenceScreen(): PreferenceScreen =
         preferenceManager.createPreferenceScreen(requireContext()).apply {
-            if (synced != detected) {
-                addPreference(R.string.plugin_needs_reload, icon = R.drawable.ic_baseline_info_24) {
-                    DataManager.addOnNextSyncedCallback {
-                        synced = DataManager.getSyncedPluginSet()
-                        detected = DataManager.detectPlugins()
-                        preferenceScreen = createPreferenceScreen()
-                    }
-                    // DataManager.sync and and restart fcitx
-                    FcitxDaemon.restartFcitx()
-                }
-            }
-            val (loaded, failed) = synced
-            if (loaded.isEmpty() && failed.isEmpty()) {
-                // use PreferenceCategory to show a divider below the "reload" preference
-                addCategory(R.string.no_plugins) {
+            val enabledLoaded = detected.loaded.filter { it.packageName in enabledPlugins }
+            val disabledLoaded = detected.loaded.filter { it.packageName !in enabledPlugins }
+            val allFailed = detected.failed.keys + synced.failed.keys
+
+            if (enabledLoaded.isNotEmpty()) {
+                addCategory(R.string.plugins_enabled) {
                     isIconSpaceReserved = false
-                    @SuppressLint("PrivateResource")
-                    // we can't hide PreferenceCategory's title,
-                    // but we can make it looks like a normal preference
-                    layoutResource = androidx.preference.R.layout.preference_material
-                }
-                return@apply
-            }
-            if (loaded.isNotEmpty()) {
-                addCategory(R.string.plugins_loaded) {
-                    isIconSpaceReserved = false
-                    loaded.forEach {
-                        addPreference(it.name, "${it.versionName}\n${it.description}") {
-                            startPluginAboutActivity(it.packageName)
+                    enabledLoaded.forEach { plugin ->
+                        addSwitch(
+                            title = plugin.name,
+                            summary = "${plugin.versionName}\n${plugin.description}",
+                            checked = true
+                        ) { enabled: Boolean ->
+                            updateEnabledPlugins(plugin.packageName, enabled)
                         }
                     }
                 }
             }
-            if (failed.isNotEmpty()) {
+
+            if (disabledLoaded.isNotEmpty()) {
+                addCategory(R.string.plugins_disabled) {
+                    isIconSpaceReserved = false
+                    disabledLoaded.forEach { plugin ->
+                        addSwitch(
+                            title = plugin.name,
+                            summary = "${plugin.versionName}\n${plugin.description}",
+                            checked = false
+                        ) { enabled: Boolean ->
+                            updateEnabledPlugins(plugin.packageName, enabled)
+                        }
+                    }
+                }
+            }
+
+            if (allFailed.isNotEmpty()) {
                 addCategory(R.string.plugins_failed) {
                     isIconSpaceReserved = false
-                    failed.forEach { (packageName, reason) ->
+                    allFailed.toSet().forEach { packageName ->
+                        val reason = synced.failed[packageName] ?: detected.failed[packageName]
                         val summary = when (reason) {
                             is PluginLoadFailed.DataDescriptorParseError -> {
                                 getString(R.string.invalid_data_descriptor)
@@ -163,6 +183,7 @@ class PluginFragment : PaddingPreferenceFragment() {
                             PluginLoadFailed.PluginDescriptorParseError -> {
                                 getString(R.string.invalid_plugin_descriptor)
                             }
+                            null -> getString(R.string.plugin_load_failed_unknown)
                         }
                         addPreference(packageName, summary) {
                             startPluginAboutActivity(packageName)

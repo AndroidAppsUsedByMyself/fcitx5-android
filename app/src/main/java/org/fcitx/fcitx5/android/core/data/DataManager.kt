@@ -13,6 +13,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.core.data.DataManager.dataDir
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.utils.FileUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.isJavaIdentifier
@@ -196,7 +197,10 @@ object DataManager {
         val (parsedDescriptors, failed) = detectPlugins()
         failedPlugins.putAll(failed)
 
-        Timber.d("Plugins to load: $parsedDescriptors")
+        val enabledPluginSet = AppPrefs.getInstance().internal.enabledPlugins.getValue()
+        val filteredDescriptors = parsedDescriptors.filter { it.packageName in enabledPluginSet }
+
+        Timber.d("Plugins to load: $filteredDescriptors")
 
         // Create an empty hierarchy
         val newHierarchy = DataHierarchy()
@@ -206,7 +210,7 @@ object DataManager {
         val pluginAssets = mutableMapOf<String, AssetManager>()
 
         // Add plugin's one by one
-        for (plugin in parsedDescriptors) {
+        for (plugin in filteredDescriptors) {
             val pluginContext = appContext.createPackageContext(plugin.packageName, 0)
             val assets = pluginContext.assets
             val descriptor = runCatching { assets.getDataDescriptor() }.onFailure {

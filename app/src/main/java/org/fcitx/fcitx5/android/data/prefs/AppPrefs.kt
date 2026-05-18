@@ -35,6 +35,15 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val pid = int("pid", 0)
         val editorInfoInspector = bool("editor_info_inspector", false)
         val needNotifications = bool("need_notifications", true)
+        val enabledPlugins = stringLike(
+            "enabled_plugins",
+            object : ManagedPreference.StringLikeCodec<Set<String>> {
+                override fun encode(x: Set<String>) = x.joinToString(",")
+                override fun decode(raw: String) =
+                    if (raw.isEmpty()) emptySet() else raw.split(",").toSet()
+            },
+            emptySet()
+        )
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
