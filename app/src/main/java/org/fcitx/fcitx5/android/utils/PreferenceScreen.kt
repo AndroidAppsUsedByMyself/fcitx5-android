@@ -12,6 +12,7 @@ import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
 import androidx.preference.PreferenceViewHolder
+import androidx.preference.SwitchPreferenceCompat
 import splitties.resources.drawable
 import splitties.resources.styledColor
 
@@ -104,5 +105,24 @@ fun PreferenceGroup.addPreference(
     addPreference(LongClickPreference(context).apply {
         setup(context.getString(title), summary?.let { context.getString(it) }, icon, onClick)
         setOnPreferenceLongClickListener(onLongClick)
+    })
+}
+
+fun PreferenceGroup.addSwitch(
+    title: String,
+    summary: String? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    addPreference(SwitchPreferenceCompat(context).apply {
+        isSingleLineTitle = false
+        setTitle(title)
+        setSummary(summary)
+        isIconSpaceReserved = false
+        isChecked = checked
+        setOnPreferenceChangeListener { _, newValue ->
+            onCheckedChange(newValue as Boolean)
+            true
+        }
     })
 }
