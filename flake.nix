@@ -1,7 +1,7 @@
 {
   description = "Dev shell flake for fcitx5-android";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs?rev=e7a3ca8092b61ff85b6a45bf863ea2b2d6a661b3";
   inputs.flake-compat = {
     url = "github:edolstra/flake-compat";
     flake = false;
@@ -53,7 +53,7 @@
                   mkShell rec {
                     buildInputs = [
                       androidComposition.androidsdk
-                      extra-cmake-modules
+                      kdePackages.extra-cmake-modules
                       gettext
                       python3
                       icu
@@ -66,7 +66,7 @@
                     BUILD_TOOLS_VERSION = buildToolsVersion;
                     GRADLE_OPTS =
                       "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2";
-                    ECM_DIR = "${extra-cmake-modules}/share/ECM/cmake/";
+                    ECM_DIR = "${kdePackages.extra-cmake-modules}/share/ECM/cmake/";
                     JAVA_HOME = "${jdk17}";
                     shellHook = lib.optionalString exportCMakeBin ''
                       export PATH="$ANDROID_SDK_ROOT/cmake/${cmakeVersion}/bin:$PATH"
