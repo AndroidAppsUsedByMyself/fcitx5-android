@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.wm
 
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.transition.Transition
 import androidx.transition.TransitionManager
@@ -36,6 +37,12 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
 
     private var currentWindow: InputWindow? = null
     private var currentView: View? = null
+
+    /**
+     * An essential window embedded inside an arbitrary container of another window (e.g. the
+     * keyboard shown below the clipboard search grid), without taking over the "current window".
+     */
+    private var auxiliaryWindow: Pair<EssentialWindow.Key, View>? = null
 
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
@@ -155,6 +162,42 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
         currentWindow = window
         // broadcast the new window was added to layout
         broadcaster.onWindowAttached(window)
+    }
+
+    /**
+     * Embed an essential window (its view saved in the window manager) into [container] of
+     * another window, without detaching the currently attached window.
+     * Only one auxiliary window can be attached at a time.
+     * Notice that no attach/detach broadcast is sent for this auxiliary window,
+     * so the bar/title UI is not affected by it.
+     */
+    fun attachAuxiliary(windowKey: EssentialWindow.Key, container: ViewGroup) {
+        check(auxiliaryWindow == null) { "An auxiliary window is already attached" }
+        val (window, savedView) = essentialWindows[windowKey]
+            ?: throw IllegalArgumentException("Essential window $windowKey is not registered")
+        val view = savedView ?: window.onCreateView().also {
+            essentialWindows[windowKey] = window to it
+        }
+        if (window is EssentialWindow) window.beforeAttached()
+        container.addView(
+            view,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        window.onAttached()
+        auxiliaryWindow = windowKey to view
+    }
+
+    /**
+     * Remove the auxiliary window (if any) from its container and notify its lifecycle callbacks.
+     */
+    fun detachAuxiliary() {
+        val pair = auxiliaryWindow ?: return
+        auxiliaryWindow = null
+        val (windowKey, view) = pair
+        // remove the view first: a re-entrant detach (eg. triggered from the window's
+        // onDetached) would otherwise try to manipulate a view still attached to the layout
+        view.parent?.let { (it as? ViewGroup)?.removeView(view) }
+        essentialWindows[windowKey]?.first?.onDetached()
     }
 
     override val view: FrameLayout by lazy { context.frameLayout(R.id.input_window) }

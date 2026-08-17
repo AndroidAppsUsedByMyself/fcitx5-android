@@ -331,6 +331,9 @@ class InputView(
     fun startInput(info: EditorInfo, capFlags: CapabilityFlags, restarting: Boolean = false) {
         broadcaster.onStartInput(info, capFlags)
         returnKeyDrawable.updateDrawableOnEditorInfo(info)
+        // when fcitx output is redirected to an internal editor (eg. clipboard search box),
+        // the keyboard is already embedded in that editor's window, don't replace it
+        if (service.isInternalTextInputActive()) return
         if (focusChangeResetKeyboard || !restarting) {
             windowManager.attachWindow(KeyboardWindow)
         }

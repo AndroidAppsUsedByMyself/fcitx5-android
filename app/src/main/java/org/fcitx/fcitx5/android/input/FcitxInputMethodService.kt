@@ -28,6 +28,7 @@ import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.view.inputmethod.InlineSuggestionsResponse
+import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodSubtype
 import android.widget.FrameLayout
 import android.widget.inline.InlinePresentationSpec
@@ -88,6 +89,18 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     private val cachedKeyEvents = LruCache<Int, KeyEvent>(78)
     private var cachedKeyEventIndex = 0
+
+    /**
+     * When set, fcitx output is redirected to an internal editor (eg. the clipboard search
+     * box) instead of the focused editor of the host app.
+     */
+    private var internalTextInput: InputConnection? = null
+
+    fun setInternalTextInput(ic: InputConnection?) {
+        internalTextInput = ic
+    }
+
+    fun isInternalTextInputActive() = internalTextInput != null
 
     /**
      * Saves MetaState produced by hardware keyboard with "sticky" modifier keys, to clear them in order.
@@ -232,9 +245,41 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     private fun handleFcitxEvent(event: FcitxEvent<*>) {
         when (event) {
             is FcitxEvent.CommitStringEvent -> {
+                internalTextInput?.let { ic ->
+                    ic.beginBatchEdit()
+                    ic.commitText(event.data.text, 1)
+                    ic.endBatchEdit()
+                    return
+                }
                 commitText(event.data.text, event.data.cursor)
             }
             is FcitxEvent.KeyEvent -> event.data.let event@{
+                internalTextInput?.let { ic ->
+                    when (it.sym.sym) {
+                        FcitxKeyMapping.FcitxKey_BackSpace -> {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                                ic.deleteSurroundingTextInCodePoints(1, 0)
+                            } else {
+                                ic.deleteSurroundingText(1, 0)
+                            }
+                        }
+                        FcitxKeyMapping.FcitxKey_Return -> {
+                            ic.performEditorAction(EditorInfo.IME_ACTION_DONE)
+                        }
+                        FcitxKeyMapping.FcitxKey_Left -> {
+                            sendInternalKeyEvent(ic, KeyEvent.KEYCODE_DPAD_LEFT)
+                        }
+                        FcitxKeyMapping.FcitxKey_Right -> {
+                            sendInternalKeyEvent(ic, KeyEvent.KEYCODE_DPAD_RIGHT)
+                        }
+                        else -> {
+                            if (it.unicode > 0) {
+                                ic.commitText(Character.toString(it.unicode), 1)
+                            }
+                        }
+                    }
+                    return@event
+                }
                 if (it.states.virtual) {
                     // KeyEvent from virtual keyboard
                     when (it.sym.sym) {
@@ -304,10 +349,29 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 }
             }
             is FcitxEvent.ClientPreeditEvent -> {
+                internalTextInput?.let { ic ->
+                    val text = event.data
+                    ic.beginBatchEdit()
+                    if (text.isEmpty()) {
+                        ic.setComposingText("", 1)
+                    } else {
+                        ic.setComposingText(text.toSpannedString(highlightColor), 1)
+                    }
+                    ic.endBatchEdit()
+                    return
+                }
                 updateComposingText(event.data)
             }
             is FcitxEvent.DeleteSurroundingEvent -> {
                 val (before, after) = event.data
+                internalTextInput?.let { ic ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        ic.deleteSurroundingTextInCodePoints(before, after)
+                    } else {
+                        ic.deleteSurroundingText(before, after)
+                    }
+                    return
+                }
                 handleDeleteSurrounding(before, after)
             }
             is FcitxEvent.IMChangeEvent -> {
@@ -421,6 +485,12 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     fun commitText(text: String, cursor: Int = -1) {
+        internalTextInput?.let {
+            it.beginBatchEdit()
+            it.commitText(text, 1)
+            it.endBatchEdit()
+            return
+        }
         val ic = currentInputConnection ?: return
         // when composing text equals commit content, finish composing text as-is
         if (composing.isNotEmpty() && composingText.toString() == text) {
@@ -481,6 +551,33 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 KeyCharacterMap.VIRTUAL_KEYBOARD,
                 ScancodeMapping.keyCodeToScancode(keyEventCode),
                 KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
+            )
+        )
+    }
+
+    /**
+     * Send a soft-keyboard key event (down + up) on the given [InputConnection], used to move
+     * the cursor in an internal editor (eg. the clipboard search box).
+     */
+    private fun sendInternalKeyEvent(ic: InputConnection, keyEventCode: Int) {
+        val eventTime = SystemClock.uptimeMillis()
+        val metaState = 0
+        ic.sendKeyEvent(
+            KeyEvent(
+                eventTime, eventTime,
+                KeyEvent.ACTION_DOWN, keyEventCode, 0, metaState,
+                KeyCharacterMap.VIRTUAL_KEYBOARD,
+                ScancodeMapping.keyCodeToScancode(keyEventCode),
+                KeyEvent.FLAG_SOFT_KEYBOARD
+            )
+        )
+        ic.sendKeyEvent(
+            KeyEvent(
+                eventTime, SystemClock.uptimeMillis(),
+                KeyEvent.ACTION_UP, keyEventCode, 0, metaState,
+                KeyCharacterMap.VIRTUAL_KEYBOARD,
+                ScancodeMapping.keyCodeToScancode(keyEventCode),
+                KeyEvent.FLAG_SOFT_KEYBOARD
             )
         )
     }

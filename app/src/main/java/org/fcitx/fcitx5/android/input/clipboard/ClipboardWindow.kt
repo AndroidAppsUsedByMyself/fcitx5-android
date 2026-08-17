@@ -30,12 +30,15 @@ import com.google.android.material.snackbar.SnackbarContentLayout
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.FcitxEvent
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.clipboard.db.ClipboardEntry
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
+import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
+import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.BooleanKey.ClipboardDbEmpty
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.BooleanKey.ClipboardListeningEnabled
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.State.AddMore
@@ -43,6 +46,7 @@ import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.State.Enab
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.State.Normal
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.TransitionEvent.ClipboardDbUpdated
 import org.fcitx.fcitx5.android.input.clipboard.ClipboardStateMachine.TransitionEvent.ClipboardListeningUpdated
+import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
@@ -56,12 +60,16 @@ import org.mechdancer.dependency.manager.must
 import splitties.dimensions.dp
 import splitties.resources.styledColor
 import splitties.views.dsl.core.withTheme
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 
-class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
+class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>(),
+    InputBroadcastReceiver {
 
     private val service: FcitxInputMethodService by manager.inputMethodService()
     private val windowManager: InputWindowManager by manager.must()
     private val theme by manager.theme()
+    private val fcitx by manager.fcitx()
 
     private val snackbarCtx by lazy {
         context.withTheme(R.style.InputViewSnackbarTheme)
@@ -87,6 +95,17 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
 
     private var isSearchMode = false
     private var currentQuery = ""
+
+    /**
+     * Height of the IME input area before the search mode expanded it. Restored on exit.
+     */
+    private var savedInputHeight: Int? = null
+
+    /**
+     * InputConnection bound to the search box, registered on the service while the search
+     * box is focused so that the Fcitx keyboard output is typed into it instead of the host.
+     */
+    private var internalTextInput: InputConnection? = null
 
     private fun getPager(query: String? = null): Pager<Int, ClipboardEntry> {
         return if (query.isNullOrEmpty()) {
@@ -136,6 +155,7 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
             }
 
             override fun onPaste(entry: ClipboardEntry) {
+                deactivateSearchInput()
                 service.commitText(entry.text)
                 if (clipboardReturnAfterPaste) windowManager.attachWindow(KeyboardWindow)
             }
@@ -309,9 +329,16 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
             toggleSearchMode()
         }
         ui.searchEditText.addTextChangedListener(searchTextWatcher)
+        ui.searchEditText.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) activateSearchInput() else deactivateSearchInput()
+        }
+        // don't let the system treat the internal search box as a normal editor:
+        // the Fcitx keyboard is embedded in the window itself
+        ui.searchEditText.setShowSoftInputOnFocus(false)
     }
 
     override fun onDetached() {
+        deactivateSearchInput()
         clipboardEnabledPref.unregisterOnChangeListener(clipboardEnabledListener)
         adapter.onDetached()
         adapterSubmitJob?.cancel()
@@ -325,7 +352,9 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
         if (isSearchMode) {
             ui.searchEditText.isVisible = true
             ui.searchEditText.requestFocus()
+            activateSearchInput()
         } else {
+            deactivateSearchInput()
             ui.searchEditText.isVisible = false
             ui.searchEditText.setText("")
             currentQuery = ""
@@ -335,6 +364,70 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
                     adapter.submitData(it)
                 }
             }
+        }
+    }
+
+    /**
+     * Embed the Fcitx keyboard below the clipboard grid and redirect IME output to the
+     * search box while it has focus.
+     */
+    private fun activateSearchInput() {
+        if (internalTextInput != null) return
+        // always embed with the text (QWERTY) layout, no matter what state the shared
+        // keyboard was left in by a previous session
+        (windowManager.getEssentialWindow(KeyboardWindow) as? KeyboardWindow)?.resetToDefaultLayout()
+        windowManager.attachAuxiliary(KeyboardWindow, ui.keyboardContainer)
+        val keyboardHeight = expandInputArea()
+        ui.setSearchKeyboardVisible(true, keyboardHeight)
+        internalTextInput = ui.searchEditText.onCreateInputConnection(EditorInfo())
+        service.setInternalTextInput(internalTextInput)
+    }
+
+    /**
+     * Enlarge the IME input area while searching so that the embedded keyboard below the
+     * clipboard grid keeps its normal (100%) height, instead of being squeezed into the
+     * space left next to the grid. Returns the normal keyboard height (px).
+     */
+    private fun expandInputArea(): Int {
+        val inputArea = windowManager.view
+        val keyboardHeight = savedInputHeight ?: inputArea.height
+        if (savedInputHeight == null) {
+            savedInputHeight = keyboardHeight
+        }
+        val gridExtra = inputArea.context.dp(ClipboardUi.SearchGridMaxHeightDp)
+        inputArea.updateLayoutParams<ViewGroup.LayoutParams> {
+            height = keyboardHeight + gridExtra
+        }
+        return keyboardHeight
+    }
+
+    private fun restoreInputArea() {
+        val restored = savedInputHeight
+        savedInputHeight = null
+        if (restored != null) {
+            windowManager.view.updateLayoutParams<ViewGroup.LayoutParams> { height = restored }
+        }
+    }
+
+    private fun deactivateSearchInput() {
+        if (internalTextInput == null) return
+        service.setInternalTextInput(null)
+        internalTextInput = null
+        windowManager.detachAuxiliary()
+        (windowManager.getEssentialWindow(KeyboardWindow) as? KeyboardWindow)?.resetToDefaultLayout()
+        ui.setSearchKeyboardVisible(false)
+        restoreInputArea()
+        // drop any candidate strip left over from fcitx
+        ui.setCandidates(arrayOf())
+    }
+
+    override fun onCandidateUpdate(data: FcitxEvent.CandidateListEvent.Data) {
+        if (!isSearchMode) {
+            ui.setCandidates(arrayOf())
+            return
+        }
+        ui.setCandidates(data.candidates) { index ->
+            fcitx.launchOnReady { it.select(index) }
         }
     }
 

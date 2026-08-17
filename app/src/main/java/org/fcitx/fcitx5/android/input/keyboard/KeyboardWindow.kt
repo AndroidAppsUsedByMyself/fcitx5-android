@@ -133,7 +133,31 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
                 if (remember) {
                     lastSymbolType = PickerWindow.Key.Symbol.name
                 }
-                windowManager.attachWindow(PickerWindow.Key.Symbol)
+                if (windowManager.isAttached(this)) {
+                    // normal mode: picker is a top-level window, switch to it
+                    windowManager.attachWindow(PickerWindow.Key.Symbol)
+                } else {
+                    // embedded mode (eg. as the clipboard search keyboard): there is no
+                    // picker window to attach to, show the machine number keypad instead
+                    if (currentKeyboardName != NumberKeyboard.Name) {
+                        detachCurrentLayout()
+                        attachLayout(NumberKeyboard.Name)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Switch back to the text (QWERTY) layout. Used to restore a sane default when the
+     * keyboard was embedded inside another window (eg. the clipboard search) and possibly
+     * left in the number layout by the user.
+     */
+    fun resetToDefaultLayout() {
+        ContextCompat.getMainExecutor(service).execute {
+            if (currentKeyboardName != TextKeyboard.Name) {
+                detachCurrentLayout()
+                attachLayout(TextKeyboard.Name)
             }
         }
     }
