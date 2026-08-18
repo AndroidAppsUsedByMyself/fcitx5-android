@@ -132,7 +132,8 @@ class PluginFragment : PaddingPreferenceFragment() {
                         addSwitch(
                             title = plugin.name,
                             summary = "${plugin.versionName}\n${plugin.description}",
-                            checked = true
+                            checked = true,
+                            onAbout = { startPluginAboutActivity(plugin.packageName) }
                         ) { enabled: Boolean ->
                             updateEnabledPlugins(plugin.packageName, enabled)
                         }
@@ -147,7 +148,8 @@ class PluginFragment : PaddingPreferenceFragment() {
                         addSwitch(
                             title = plugin.name,
                             summary = "${plugin.versionName}\n${plugin.description}",
-                            checked = false
+                            checked = false,
+                            onAbout = { startPluginAboutActivity(plugin.packageName) }
                         ) { enabled: Boolean ->
                             updateEnabledPlugins(plugin.packageName, enabled)
                         }

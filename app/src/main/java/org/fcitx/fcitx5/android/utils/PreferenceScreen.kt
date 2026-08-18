@@ -13,6 +13,7 @@ import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceScreen
 import androidx.preference.PreferenceViewHolder
 import androidx.preference.SwitchPreferenceCompat
+import org.fcitx.fcitx5.android.R
 import splitties.resources.drawable
 import splitties.resources.styledColor
 
@@ -108,13 +109,39 @@ fun PreferenceGroup.addPreference(
     })
 }
 
+/**
+ * Same as [SwitchPreferenceCompat], but with an extra "about" button in the widget area,
+ * wired separately from the switch so the switch only toggles the preference.
+ */
+private class SwitchWithAboutPreference(
+    context: Context,
+    private val onAboutClick: () -> Unit
+) : SwitchPreferenceCompat(context) {
+    init {
+        widgetLayoutResource = R.layout.preference_switch_with_about
+    }
+
+    override fun onBindViewHolder(holder: PreferenceViewHolder) {
+        super.onBindViewHolder(holder)
+        holder.findViewById(R.id.plugin_about_button).setOnClickListener {
+            onAboutClick()
+        }
+    }
+}
+
 fun PreferenceGroup.addSwitch(
     title: String,
     summary: String? = null,
     checked: Boolean,
+    onAbout: (() -> Unit)? = null,
     onCheckedChange: (Boolean) -> Unit
 ) {
-    addPreference(SwitchPreferenceCompat(context).apply {
+    val preference = if (onAbout != null) {
+        SwitchWithAboutPreference(context, onAbout)
+    } else {
+        SwitchPreferenceCompat(context)
+    }
+    addPreference(preference.apply {
         isSingleLineTitle = false
         setTitle(title)
         setSummary(summary)

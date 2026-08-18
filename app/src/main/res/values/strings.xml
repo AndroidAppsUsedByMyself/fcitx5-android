@@ -217,6 +217,7 @@
     <string name="plugins">Plugins</string>
     <string name="plugins_loaded">Loaded</string>
     <string name="plugins_enabled">Enabled</string>
+    <string name="plugin_about">About</string>
     <string name="plugins_disabled">Disabled</string>
     <string name="plugins_failed">Load failed</string>
     <string name="plugin_load_failed_unknown">Unknown error</string>
