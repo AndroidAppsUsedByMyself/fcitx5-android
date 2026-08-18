@@ -178,6 +178,7 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
         val view = savedView ?: window.onCreateView().also {
             essentialWindows[windowKey] = window to it
         }
+        check(view.parent == null) { "View of essential window $windowKey is already attached elsewhere" }
         if (window is EssentialWindow) window.beforeAttached()
         container.addView(
             view,
