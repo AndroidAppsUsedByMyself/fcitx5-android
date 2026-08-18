@@ -14,9 +14,8 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.TextView
 import android.widget.ViewAnimator
-import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.transition.Fade
@@ -65,7 +64,7 @@ class ClipboardUi(override val ctx: Context, private val theme: Theme) : Ui {
     val searchEditText = EditText(ctx).apply {
         hint = ctx.getString(R.string.search_clipboard)
         setTextColor(theme.popupTextColor)
-        setHintTextColor(theme.popupTextColor and 0x00FFFFFF or 0x80000000.toInt())
+        setHintTextColor(ColorUtils.setAlphaComponent(theme.popupTextColor, 0x80))
         textSize = 16f
         typeface = Typeface.DEFAULT
         setBackgroundColor(theme.popupBackgroundColor)
@@ -83,9 +82,10 @@ class ClipboardUi(override val ctx: Context, private val theme: Theme) : Ui {
 
     val extension = horizontalLayout {
         add(searchIcon, lParams(dp(40), dp(40)))
-        add(searchEditText, lParams(matchParent, dp(40)) {
+        add(searchEditText, lParams(0, dp(40), weight = 1f) {
             marginStart = dp(4)
         })
+        add(deleteAllButton, lParams(dp(40), dp(40)))
     }
 
     /**
@@ -99,8 +99,6 @@ class ClipboardUi(override val ctx: Context, private val theme: Theme) : Ui {
     }
 
     private val candidateContent = horizontalLayout {}
-
-    private val candidateViews = mutableListOf<TextView>()
 
     /**
      * Horizontal, scrollable row of fcitx candidates shown above the embedded keyboard
@@ -144,7 +142,6 @@ class ClipboardUi(override val ctx: Context, private val theme: Theme) : Ui {
 
     fun setCandidates(candidates: Array<CandidateWord>, onSelect: (Int) -> Unit = {}) {
         candidateContent.removeAllViews()
-        candidateViews.clear()
         if (candidates.isEmpty()) {
             candidateStrip.isVisible = false
             return
@@ -160,7 +157,6 @@ class ClipboardUi(override val ctx: Context, private val theme: Theme) : Ui {
                 setPadding(dp(12), dp(4), dp(12), dp(4))
                 setOnClickListener { onSelect(index) }
             }
-            candidateViews.add(tv)
             candidateContent.add(
                 tv,
                 android.widget.LinearLayout.LayoutParams(

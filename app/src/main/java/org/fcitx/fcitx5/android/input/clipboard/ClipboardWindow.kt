@@ -17,6 +17,7 @@ import androidx.core.text.bold
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import androidx.core.view.isVisible
+import androidx.core.view.doOnLayout
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import androidx.paging.Pager
@@ -373,12 +374,11 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>(),
      */
     private fun activateSearchInput() {
         if (internalTextInput != null) return
-        // always embed with the text (QWERTY) layout, no matter what state the shared
-        // keyboard was left in by a previous session
-        (windowManager.getEssentialWindow(KeyboardWindow) as? KeyboardWindow)?.resetToDefaultLayout()
+        // embed the keyboard first (its view gets created), then restore the text (QWERTY)
+        // layout synchronously so it can't race with the embed below
         windowManager.attachAuxiliary(KeyboardWindow, ui.keyboardContainer)
-        val keyboardHeight = expandInputArea()
-        ui.setSearchKeyboardVisible(true, keyboardHeight)
+        (windowManager.getEssentialWindow(KeyboardWindow) as? KeyboardWindow)?.resetToDefaultLayout()
+        expandInputArea()
         internalTextInput = ui.searchEditText.onCreateInputConnection(EditorInfo())
         service.setInternalTextInput(internalTextInput)
     }
@@ -386,10 +386,17 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>(),
     /**
      * Enlarge the IME input area while searching so that the embedded keyboard below the
      * clipboard grid keeps its normal (100%) height, instead of being squeezed into the
-     * space left next to the grid. Returns the normal keyboard height (px).
+     * space left next to the grid.
      */
-    private fun expandInputArea(): Int {
+    private fun expandInputArea() {
         val inputArea = windowManager.view
+        // the very first activation can happen before the IME window is laid out; recording
+        // height=0 here would leave the window collapsed after search is closed, so defer
+        // until the size is actually known
+        if (inputArea.height <= 0) {
+            inputArea.doOnLayout { expandInputArea() }
+            return
+        }
         val keyboardHeight = savedInputHeight ?: inputArea.height
         if (savedInputHeight == null) {
             savedInputHeight = keyboardHeight
@@ -398,7 +405,7 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>(),
         inputArea.updateLayoutParams<ViewGroup.LayoutParams> {
             height = keyboardHeight + gridExtra
         }
-        return keyboardHeight
+        ui.setSearchKeyboardVisible(true, keyboardHeight)
     }
 
     private fun restoreInputArea() {
@@ -422,12 +429,14 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>(),
     }
 
     override fun onCandidateUpdate(data: FcitxEvent.CandidateListEvent.Data) {
-        if (!isSearchMode) {
+        // candidates only make sense while the search box (and its embedded keyboard) is
+        // actually active: after focus is lost the keyboard is detached, so drop them
+        if (isSearchMode && internalTextInput != null) {
+            ui.setCandidates(data.candidates) { index ->
+                fcitx.launchOnReady { it.select(index) }
+            }
+        } else {
             ui.setCandidates(arrayOf())
-            return
-        }
-        ui.setCandidates(data.candidates) { index ->
-            fcitx.launchOnReady { it.select(index) }
         }
     }
 

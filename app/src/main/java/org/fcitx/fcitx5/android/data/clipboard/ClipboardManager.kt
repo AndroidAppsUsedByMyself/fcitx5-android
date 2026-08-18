@@ -104,7 +104,12 @@ object ClipboardManager : ClipboardManager.OnPrimaryClipChangedListener,
 
     fun allEntries() = clbDao.allEntries()
 
-    fun searchEntries(query: String) = clbDao.searchEntries(query)
+    /**
+     * Search clipboard history with a case-insensitive substring match. The query is escaped
+     * so that literal `%`/`_` (SQL LIKE wildcards) are matched verbatim.
+     */
+    fun searchEntries(query: String) =
+        clbDao.searchEntries(query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_"))
 
     suspend fun pin(id: Int) = clbDao.updatePinStatus(id, true)
 

@@ -152,13 +152,12 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
      * Switch back to the text (QWERTY) layout. Used to restore a sane default when the
      * keyboard was embedded inside another window (eg. the clipboard search) and possibly
      * left in the number layout by the user.
+     * Callers must be on the main thread with the keyboard view already created.
      */
     fun resetToDefaultLayout() {
-        ContextCompat.getMainExecutor(service).execute {
-            if (currentKeyboardName != TextKeyboard.Name) {
-                detachCurrentLayout()
-                attachLayout(TextKeyboard.Name)
-            }
+        if (currentKeyboardName != TextKeyboard.Name) {
+            detachCurrentLayout()
+            attachLayout(TextKeyboard.Name)
         }
     }
 
