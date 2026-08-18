@@ -19,8 +19,10 @@ class AndroidPluginAppConventionPlugin : Plugin<Project> {
         val pluginName = target.name.replace("-", "_")
         val pluginAppId = (target.findProperty("APP_ID") as? String)?.let { "$it.plugin.$pluginName" }
             ?: "org.fcitx.fcitx5.android.plugin.$pluginName"
-        val pluginNamespace = (target.findProperty("APP_ID") as? String)?.let { "$it.plugin.$pluginName" }
-            ?: "org.fcitx.fcitx5.android.plugin.$pluginName"
+        // namespace must stay the fixed source package: generated BuildConfig/R classes
+        // and relative class names in the merged manifest are resolved against it,
+        // while applicationId (the installed package) varies with APP_ID
+        val pluginNamespace = "org.fcitx.fcitx5.android.plugin.$pluginName"
         target.extensions.configure<ApplicationExtension> {
             buildFeatures {
                 buildConfig = true
@@ -50,32 +52,12 @@ class AndroidPluginAppConventionPlugin : Plugin<Project> {
         }
         target.extensions.configure<ApplicationAndroidComponentsExtension> {
             onVariants { variant ->
-                variant.outputs.forEach { output ->
-                    if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
-                        val oldPrefix = "org.fcitx.fcitx5.android.plugin." + target.name.replace("-", "_")
-                        val newPrefix = mainAppId + ".plugin." + pluginName
-                        output.outputFileName.set(output.outputFileName.get().replace(oldPrefix, newPrefix))
-                    }
-                }
                 val variantName = variant.name.capitalized()
                 target.afterEvaluate {
                     val pluginsTaskName = "assemble${variantName}Plugins"
                     val pluginsTask = target.rootProject.tasks.findByName(pluginsTaskName)
                         ?: target.rootProject.tasks.register(pluginsTaskName).get()
                     pluginsTask?.dependsOn(target.tasks.getByName("assemble${variantName}"))
-                    try {
-                        target.rootProject.project(":lib:plugin-base").extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-                            defaultConfig {
-                                addManifestPlaceholders(
-                                    mapOf(
-                                        "mainApplicationId" to "$mainAppId.debug"
-                                    )
-                                )
-                            }
-                        }
-                    } catch (e: Exception) {
-                        // ignore if not found
-                    }
                 }
             }
         }

@@ -28,8 +28,7 @@ class MainService : FcitxPluginService() {
     }
 
     override fun start() {
-        val mainAppId = "org.fcitx.fcitx5.android"
-        connection = bindFcitxRemoteService("$mainAppId.debug") {
+        connection = bindFcitxRemoteService(BuildConfig.MAIN_APPLICATION_ID) {
             log("Bind to fcitx remote")
             it.registerClipboardEntryTransformer(transformer)
         }

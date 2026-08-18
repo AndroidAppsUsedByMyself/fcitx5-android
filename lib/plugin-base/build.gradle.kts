@@ -8,12 +8,21 @@ android {
     namespace = "org.fcitx.fcitx5.android.lib.plugin_base"
 
     val mainAppId = (project.findProperty("APP_ID") as? String) ?: "org.fcitx.fcitx5.android"
-    defaultConfig {
-        addManifestPlaceholders(
-            mapOf(
-                "mainApplicationId" to "$mainAppId.debug"
+    buildTypes {
+        release {
+            addManifestPlaceholders(
+                mapOf(
+                    "mainApplicationId" to mainAppId
+                )
             )
-        )
+        }
+        debug {
+            addManifestPlaceholders(
+                mapOf(
+                    "mainApplicationId" to "$mainAppId.debug"
+                )
+            )
+        }
     }
 
     publishing {
