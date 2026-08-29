@@ -43,6 +43,7 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
      * keyboard shown below the clipboard search grid), without taking over the "current window".
      */
     private var auxiliaryWindow: Pair<EssentialWindow.Key, View>? = null
+    private var auxiliaryContainer: ViewGroup? = null
 
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
 
@@ -186,6 +187,7 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
         )
         window.onAttached()
         auxiliaryWindow = windowKey to view
+        auxiliaryContainer = container
     }
 
     /**
@@ -194,11 +196,45 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
     fun detachAuxiliary() {
         val pair = auxiliaryWindow ?: return
         auxiliaryWindow = null
+        auxiliaryContainer = null
         val (windowKey, view) = pair
         // remove the view first: a re-entrant detach (eg. triggered from the window's
         // onDetached) would otherwise try to manipulate a view still attached to the layout
         view.parent?.let { (it as? ViewGroup)?.removeView(view) }
         essentialWindows[windowKey]?.first?.onDetached()
+    }
+
+    /**
+     * Whether an auxiliary window is currently attached.
+     */
+    val isAuxiliary: Boolean get() = auxiliaryWindow != null
+
+    /**
+     * Replace the current auxiliary window with [windowKey] in the same container.
+     * The old auxiliary is detached and the new one is attached.
+     */
+    fun switchAuxiliary(windowKey: EssentialWindow.Key) {
+        val container = auxiliaryContainer
+            ?: error("No auxiliary container")
+        val (oldKey, oldView) = auxiliaryWindow
+            ?: error("No auxiliary window attached")
+        // detach old auxiliary
+        oldView.parent?.let { (it as? ViewGroup)?.removeView(oldView) }
+        essentialWindows[oldKey]?.first?.onDetached()
+        // attach new auxiliary
+        val (window, savedView) = essentialWindows[windowKey]
+            ?: throw IllegalArgumentException("Essential window $windowKey is not registered")
+        val newView = savedView ?: window.onCreateView().also {
+            essentialWindows[windowKey] = window to it
+        }
+        check(newView.parent == null) { "View of essential window $windowKey is already attached elsewhere" }
+        if (window is EssentialWindow) window.beforeAttached()
+        container.addView(
+            newView,
+            ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        )
+        window.onAttached()
+        auxiliaryWindow = windowKey to newView
     }
 
     override val view: FrameLayout by lazy { context.frameLayout(R.id.input_window) }

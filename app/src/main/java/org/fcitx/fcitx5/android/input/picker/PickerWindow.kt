@@ -57,13 +57,18 @@ class PickerWindow(
     private val keyActionListener = KeyActionListener { it, source ->
         when (it) {
             is KeyAction.LayoutSwitchAction -> {
-                // Switch to NumberKeyboard before attaching KeyboardWindow
+                // Switch to the target layout in KeyboardWindow before re-attaching it
                 (windowManager.getEssentialWindow(KeyboardWindow) as KeyboardWindow)
                     .switchLayout(it.act)
                 // The real switchLayout (detachCurrentLayout and attachLayout) in KeyboardWindow is postponed,
-                // so we have to postpone attachWindow as well
+                // so we have to postpone the window switch as well
                 ContextCompat.getMainExecutor(context).execute {
-                    windowManager.attachWindow(KeyboardWindow)
+                    if (windowManager.isAuxiliary) {
+                        // embedded mode (eg. clipboard search): swap the auxiliary back to KeyboardWindow
+                        windowManager.switchAuxiliary(KeyboardWindow)
+                    } else {
+                        windowManager.attachWindow(KeyboardWindow)
+                    }
                 }
             }
 

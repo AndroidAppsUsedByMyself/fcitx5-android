@@ -136,9 +136,12 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
                 if (windowManager.isAttached(this)) {
                     // normal mode: picker is a top-level window, switch to it
                     windowManager.attachWindow(PickerWindow.Key.Symbol)
+                } else if (windowManager.isAuxiliary) {
+                    // embedded mode (eg. as the clipboard search keyboard):
+                    // swap the auxiliary window from KeyboardWindow to PickerWindow
+                    windowManager.switchAuxiliary(PickerWindow.Key.Symbol)
                 } else {
-                    // embedded mode (eg. as the clipboard search keyboard): there is no
-                    // picker window to attach to, show the machine number keypad instead
+                    // fallback: show the number keypad
                     if (currentKeyboardName != NumberKeyboard.Name) {
                         detachCurrentLayout()
                         attachLayout(NumberKeyboard.Name)
