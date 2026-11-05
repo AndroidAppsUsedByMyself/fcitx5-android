@@ -3,7 +3,7 @@ name: Nix
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [dev20261105, master]
 
 jobs:
   develop:
