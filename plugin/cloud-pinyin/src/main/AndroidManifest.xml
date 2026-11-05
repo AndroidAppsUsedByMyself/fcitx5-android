@@ -28,6 +28,7 @@
         <activity
             android:name=".CloudPinyinSettingsActivity"
             android:exported="true"
+            android:permission="${mainApplicationId}.permission.PLUGIN"
             android:label="@string/settings_title">
             <intent-filter>
                 <action android:name="${mainApplicationId}.plugin.SETTINGS" />

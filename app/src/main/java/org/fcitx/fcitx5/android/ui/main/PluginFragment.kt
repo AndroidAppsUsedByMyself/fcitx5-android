@@ -34,6 +34,7 @@ import org.fcitx.fcitx5.android.core.data.PluginOrigin
 import org.fcitx.fcitx5.android.core.data.PluginServiceState
 import org.fcitx.fcitx5.android.core.data.PluginState
 import org.fcitx.fcitx5.android.core.data.PluginStateResolver
+import org.fcitx.fcitx5.android.core.data.resolveSettingsActivityClass
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
@@ -352,7 +353,7 @@ class PluginFragment : PaddingPreferenceFragment() {
         val className = descriptor.settingsActivity ?: return
         val component = ComponentName(
             descriptor.packageName,
-            if (className.startsWith(".")) descriptor.packageName + className else className
+            resolveSettingsActivityClass(descriptor.packageName, className)
         )
         runCatching {
             startActivity(Intent().apply {
