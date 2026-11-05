@@ -202,7 +202,9 @@ object PluginManifestParser {
                         "library" -> if (inProvides && !value.isNullOrEmpty()) libraries.add(value)
                         "dataRoot" -> if (inProvides && !value.isNullOrEmpty()) dataRoots.add(value)
                         "component" -> if (inService) component = value
-                        "action" -> if (inService) action = value
+                        "action" -> if (inService) {
+                            action = resolveStringResource(value, resources, packageName)
+                        }
                         "protocolVersion" -> if (inService) {
                             protocolVersion = value?.toIntOrNull() ?: -1
                         }
@@ -218,7 +220,7 @@ object PluginManifestParser {
         return RawPluginManifest(
             apiVersion = apiVersion,
             domain = domain,
-            description = resolveDescription(description, resources, packageName),
+            description = resolveStringResource(description, resources, packageName),
             hasService = hasService,
             provides = if (seesProvides) {
                 PluginProvides(addons, libraries, dataRoots)
@@ -233,8 +235,12 @@ object PluginManifestParser {
         )
     }
 
+    /**
+     * Resolve a `@string/name` reference. Values that are not resource references, or
+     * references that do not resolve, are returned unchanged.
+     */
     @SuppressLint("DiscouragedApi")
-    private fun resolveDescription(
+    private fun resolveStringResource(
         value: String?,
         resources: Resources,
         packageName: String

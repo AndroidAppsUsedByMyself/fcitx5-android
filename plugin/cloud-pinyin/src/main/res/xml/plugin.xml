@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<plugin>
+    <apiVersion>0.1</apiVersion>
+    <description>@string/description</description>
+    <provides>
+        <addon>cloudpinyin</addon>
+    </provides>
+    <service>
+        <component>.CloudPinyinService</component>
+        <!-- Resolved from a build-type specific string resource -->
+        <action>@string/ipc_service_action</action>
+        <protocolVersion>1</protocolVersion>
+    </service>
+</plugin>

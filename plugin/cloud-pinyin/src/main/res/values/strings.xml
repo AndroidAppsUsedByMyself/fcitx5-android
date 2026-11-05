@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name_release">Fcitx5 Cloud Pinyin</string>
+    <string name="app_name_debug">Fcitx5 Cloud Pinyin (Debug)</string>
+    <string name="description">Cloud pinyin candidate source</string>
+</resources>
