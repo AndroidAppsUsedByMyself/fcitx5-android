@@ -33,16 +33,30 @@ enum class PluginOrigin {
 
 /**
  * Trusted plugin signers, expressed as lowercase hex SHA-256 certificate fingerprints.
- *
- * Both sets are empty by default, so every plugin is treated as [PluginOrigin.ThirdParty]
- * until real fingerprints are configured.
  */
 object PluginTrust {
-    @Volatile
-    var officialSignatures: Set<String> = emptySet()
+    /**
+     * Release certificate of the upstream project, taken from the F-Droid metadata
+     * (`AllowedAPKSigningKeys` in `app/org.fcitx.fcitx5.android.yml`). No other upstream
+     * certificate is recorded in this repository.
+     */
+    const val UPSTREAM_RELEASE_SHA256 =
+        "e4db1e9edff13629d07de4bbf8165fe9bd8557ab55092672da8e40dbe484ecd7"
+
+    /**
+     * The public Android debug certificate (`CN=Android Debug`, also used by the debug
+     * APKs in this workspace per `apksigner verify --print-certs`). It is shared by every
+     * Android debug build, so it must only be trusted in debug builds.
+     */
+    const val ANDROID_DEBUG_SHA256 =
+        "fa269cd524ba67b1a843bb8c785cbc254e7c532ded734da2456d2686d96747c6"
 
     @Volatile
-    var downstreamSignatures: Set<String> = emptySet()
+    var officialSignatures: Set<String> = setOf(UPSTREAM_RELEASE_SHA256)
+
+    @Volatile
+    var downstreamSignatures: Set<String> =
+        if (BuildConfig.DEBUG) setOf(ANDROID_DEBUG_SHA256) else emptySet()
 
     fun policy(): PluginSignaturePolicy =
         PluginSignaturePolicy(officialSignatures, downstreamSignatures)

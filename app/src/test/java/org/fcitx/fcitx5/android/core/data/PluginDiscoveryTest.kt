@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.core.data
 
+import org.fcitx.fcitx5.android.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -40,6 +41,35 @@ class PluginDiscoveryTest {
         assertEquals(
             PluginOrigin.ThirdParty,
             PluginSignaturePolicy().originOf(setOf(officialFingerprint))
+        )
+    }
+
+    @Test
+    fun testConfiguredUpstreamSignerIsOfficial() {
+        assertEquals(
+            PluginOrigin.Official,
+            PluginTrust.policy().originOf(setOf(PluginTrust.UPSTREAM_RELEASE_SHA256))
+        )
+    }
+
+    @Test
+    fun testConfiguredDebugSignerFollowsBuildType() {
+        val expected = if (BuildConfig.DEBUG) {
+            PluginOrigin.Downstream
+        } else {
+            PluginOrigin.ThirdParty
+        }
+        assertEquals(
+            expected,
+            PluginTrust.policy().originOf(setOf(PluginTrust.ANDROID_DEBUG_SHA256))
+        )
+    }
+
+    @Test
+    fun testConfiguredPolicyRejectsUnknownFingerprint() {
+        assertEquals(
+            PluginOrigin.ThirdParty,
+            PluginTrust.policy().originOf(setOf(unknownFingerprint))
         )
     }
 
