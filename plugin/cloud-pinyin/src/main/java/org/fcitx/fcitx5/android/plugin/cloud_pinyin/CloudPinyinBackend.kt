@@ -27,32 +27,49 @@ enum class CloudPinyinBackend(val key: String) {
 
     fun parseResponse(body: String): String? = when (this) {
         Off -> null
-        Google -> {
-            if (!body.contains("\"SUCCESS\"")) return null
-            firstCjkCandidate(body)
-        }
-
-        Baidu -> {
-            if (!STATUS_OK.containsMatchIn(body) || !ERRNO_OK.containsMatchIn(body)) return null
-            firstCjkCandidate(body)
-        }
+        Google -> parseGoogle(input = body)
+        Baidu -> parseBaidu(input = body)
     }
 
     companion object {
-        private val STATUS_OK = Regex("\"status\"\\s*:\\s*\"T\"")
-        private val ERRNO_OK = Regex("\"errno\"\\s*:\\s*\"0\"")
-        private val QUOTED = Regex("\"((?:\\\\.|[^\"\\\\])*)\"")
-        private val CJK = Regex("[\\u3400-\\u9fff]")
-
         fun fromKey(key: String?): CloudPinyinBackend =
             entries.firstOrNull { it.key == key } ?: Off
 
-        private fun firstCjkCandidate(body: String): String? =
-            QUOTED.findAll(body)
-                .map { unescape(it.groupValues[1]) }
-                .firstOrNull { CJK.containsMatchIn(it) && it.isNotBlank() }
+        /**
+         * Google inputtools: `["SUCCESS", [["pinyin", ["候选", ...], ...]]]`.
+         * Only `SUCCESS` is accepted; anything else is a failure.
+         */
+        fun parseGoogle(input: String): String? {
+            val root = runCatching { JsonReader(input).read() }.getOrNull() as? JsonValue.Arr
+                ?: return null
+            val status = (root.items.getOrNull(0) as? JsonValue.Str)?.value ?: return null
+            if (status != "SUCCESS") return null
+            val payload = root.items.getOrNull(1) as? JsonValue.Arr ?: return null
+            val group = payload.items.getOrNull(0) as? JsonValue.Arr ?: return null
+            val candidates = group.items.getOrNull(1) as? JsonValue.Arr ?: return null
+            return (candidates.items.getOrNull(0) as? JsonValue.Str)?.value?.takeIf { it.isNotBlank() }
+        }
 
-        private fun unescape(value: String): String =
-            value.replace("\\\"", "\"").replace("\\\\", "\\")
+        /**
+         * Baidu olime: `{"status":"T","errno":"0","result":[[["候选",...]]]}`.
+         * `status` must be `T`, `errno` may be string or number `0`.
+         */
+        fun parseBaidu(input: String): String? {
+            val root = runCatching { JsonReader(input).read() }.getOrNull() as? JsonValue.Obj
+                ?: return null
+            val status = (root.fields["status"] as? JsonValue.Str)?.value ?: return null
+            if (status != "T") return null
+            val errno = root.fields["errno"] ?: return null
+            val errnoOk = when (errno) {
+                is JsonValue.Str -> errno.value == "0"
+                is JsonValue.Number -> errno.raw == "0"
+                else -> false
+            }
+            if (!errnoOk) return null
+            val result = root.fields["result"] as? JsonValue.Arr ?: return null
+            val level1 = result.items.getOrNull(0) as? JsonValue.Arr ?: return null
+            val level2 = level1.items.getOrNull(0) as? JsonValue.Arr ?: return null
+            return (level2.items.getOrNull(0) as? JsonValue.Str)?.value?.takeIf { it.isNotBlank() }
+        }
     }
 }
