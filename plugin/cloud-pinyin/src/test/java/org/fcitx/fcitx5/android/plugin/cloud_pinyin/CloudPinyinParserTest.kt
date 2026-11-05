@@ -5,7 +5,7 @@
 package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CloudPinyinParserTest {
@@ -19,72 +19,101 @@ class CloudPinyinParserTest {
     private val baiduOk =
         """{"status":"T","errno":"0","errmsg":"","result":[[["结果",6,{"pinyin":"jie'guo","type":"IMEDICT"}]]]}"""
 
+    private fun assertFailed(result: CloudPinyinParseResult) {
+        assertTrue(result is CloudPinyinParseResult.Failure)
+    }
+
+    @Test
+    fun testGoogleCnNormal() {
+        assertEquals(
+            CloudPinyinParseResult.Candidate("你好"),
+            GoogleCnBackend().parse(googleOk)
+        )
+    }
+
     @Test
     fun testGoogleNormal() {
-        assertEquals("你好", CloudPinyinBackend.parseGoogle(googleOk))
+        assertEquals(
+            CloudPinyinParseResult.Candidate("你好"),
+            GoogleBackend().parse(googleOk)
+        )
     }
 
     @Test
     fun testGoogleNonSuccessStatus() {
-        assertNull(CloudPinyinBackend.parseGoogle("""["FAILED_TO_PARSE_REQUEST_BODY"]"""))
-        assertNull(CloudPinyinBackend.parseGoogle("""["FAILED",[]]"""))
+        assertFailed(GoogleBackend().parse("""["FAILED_TO_PARSE_REQUEST_BODY"]"""))
+        assertFailed(GoogleBackend().parse("""["FAILED",[]]"""))
     }
 
     @Test
     fun testGoogleMissingFieldAndWrongType() {
-        assertNull(CloudPinyinBackend.parseGoogle("""[]"""))
-        assertNull(CloudPinyinBackend.parseGoogle("""["SUCCESS",[]]"""))
-        assertNull(CloudPinyinBackend.parseGoogle("""["SUCCESS",[["nihao",[1]]]]"""))
-        assertNull(CloudPinyinBackend.parseGoogle("""{"status":"SUCCESS"}"""))
+        assertFailed(GoogleBackend().parse("""[]"""))
+        assertFailed(GoogleBackend().parse("""["SUCCESS",[]]"""))
+        assertFailed(GoogleBackend().parse("""["SUCCESS",[["nihao",[1]]]]"""))
+        assertFailed(GoogleBackend().parse("""{"status":"SUCCESS"}"""))
     }
 
     @Test
     fun testGoogleOversize() {
-        assertNull(CloudPinyinBackend.parseGoogle("[" + "\"x\"".repeat(5000) + "]"))
+        assertFailed(GoogleBackend().parse("[" + "\"x\"".repeat(5000) + "]"))
     }
 
     @Test
     fun testGoogleNestingTooDeep() {
-        assertNull(CloudPinyinBackend.parseGoogle("[".repeat(20) + "1" + "]".repeat(20)))
+        assertFailed(GoogleBackend().parse("[".repeat(20) + "1" + "]".repeat(20)))
+    }
+
+    @Test
+    fun testGoogleEndpoints() {
+        assertEquals(
+            "https://www.google.cn/inputtools/request?ime=pinyin&text=ni%27hao",
+            GoogleCnBackend().requestUrl("ni'hao")
+        )
+        assertEquals(
+            "https://www.google.com/inputtools/request?ime=pinyin&text=ni%27hao",
+            GoogleBackend().requestUrl("ni'hao")
+        )
     }
 
     @Test
     fun testBaiduNormal() {
-        assertEquals("结果", CloudPinyinBackend.parseBaidu(baiduOk))
+        assertEquals(CloudPinyinParseResult.Candidate("结果"), BaiduBackend().parse(baiduOk))
     }
 
     @Test
     fun testBaiduNonSuccessStatus() {
-        assertNull(
-            CloudPinyinBackend.parseBaidu(
-                """{"status":"F","errno":"3","errmsg":"","result":[]}"""
-            )
+        assertFailed(
+            BaiduBackend().parse("""{"status":"F","errno":"3","errmsg":"","result":[]}""")
         )
     }
 
     @Test
     fun testBaiduMissingFieldAndWrongType() {
-        assertNull(CloudPinyinBackend.parseBaidu("""{"errno":"0"}"""))
-        assertNull(CloudPinyinBackend.parseBaidu("""{"status":"T","errno":"0"}"""))
-        assertNull(
-            CloudPinyinBackend.parseBaidu(
-                """{"status":"T","errno":"0","result":[[[1]]]}"""
-            )
-        )
+        assertFailed(BaiduBackend().parse("""{"errno":"0"}"""))
+        assertFailed(BaiduBackend().parse("""{"status":"T","errno":"0"}"""))
+        assertFailed(BaiduBackend().parse("""{"status":"T","errno":"0","result":[[[1]]]}"""))
     }
 
     @Test
     fun testBaiduNestingTooDeep() {
-        assertNull(CloudPinyinBackend.parseBaidu("{\"a\":" + "[".repeat(20) + "1" + "]".repeat(20) + "}"))
+        assertFailed(
+            BaiduBackend().parse("{\"a\":" + "[".repeat(20) + "1" + "]".repeat(20) + "}")
+        )
     }
 
     @Test
     fun testBaiduErrnAsNumber() {
         assertEquals(
-            "结果",
-            CloudPinyinBackend.parseBaidu(
-                """{"status":"T","errno":0,"result":[[["结果"]]]}"""
-            )
+            CloudPinyinParseResult.Candidate("结果"),
+            BaiduBackend().parse("""{"status":"T","errno":0,"result":[[["结果"]]]}""")
+        )
+    }
+
+    @Test
+    fun testBaiduEndpoint() {
+        assertEquals(
+            "https://olimenew.baidu.com/py?input=ni%27hao&inputtype=py&resultcoding=utf-8",
+            BaiduBackend().requestUrl("ni'hao")
         )
     }
 }

@@ -35,10 +35,16 @@ class CloudPinyinService : Service() {
     private val repository by lazy {
         CloudPinyinRepository(
             scope = scope,
-            backendProvider = { CloudPinyinSettings.backend(this) },
+            configProvider = {
+                val snapshot = CloudPinyinSettings.snapshot(this)
+                CloudPinyinConfig(
+                    backends = CloudPinyinBackendRegistry.createAll(snapshot.providers),
+                    fallbackEnabled = snapshot.fallbackEnabled
+                )
+            },
             onlineCheck = ::isOnline,
-            fetcher = { backend, pinyin, requestId ->
-                httpClient.fetch(backend, pinyin, requestId)
+            fetcher = { backend, pinyin, requestId, timeoutMillis ->
+                httpClient.fetch(backend, pinyin, requestId, timeoutMillis)
             },
             disconnect = httpClient::disconnect
         )

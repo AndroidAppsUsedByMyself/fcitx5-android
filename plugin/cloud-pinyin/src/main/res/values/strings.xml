@@ -4,9 +4,17 @@
     <string name="app_name_debug">Fcitx5 Cloud Pinyin (Debug)</string>
     <string name="description">Cloud pinyin candidate source</string>
     <string name="settings_title">Cloud Pinyin Settings</string>
-    <string name="settings_backend_title">Cloud backend</string>
-    <string name="settings_backend_off">Off</string>
-    <string name="settings_backend_google">Google inputtools</string>
-    <string name="settings_backend_baidu">Baidu olime</string>
-    <string name="settings_disclaimer">These third-party endpoints have no official SLA and may stop working at any time. Pinyin text is sent to the selected provider only when enabled.</string>
+    <string name="provider_google_cn">Google CN (recommended)</string>
+    <string name="provider_google">Google inputtools</string>
+    <string name="provider_baidu">Baidu olime</string>
+    <string name="settings_providers_title">Providers (highest priority first)</string>
+    <string name="settings_providers_empty">No provider configured. Cloud Pinyin will not send any request.</string>
+    <string name="settings_add_provider">Add provider</string>
+    <string name="settings_provider_up">↑</string>
+    <string name="settings_provider_down">↓</string>
+    <string name="settings_provider_remove">✕</string>
+    <string name="settings_provider_duplicate">This provider is already in the list.</string>
+    <string name="settings_fallback_title">Fall back to the next provider on failure</string>
+    <string name="settings_fallback_warning">Off by default. When enabled, providers are tried in list order until one returns a candidate. This adds latency, may send the same pinyin to several third parties, and different providers may return different candidates.</string>
+    <string name="settings_disclaimer">These third-party endpoints have no official SLA and may stop working at any time. Pinyin text is sent only to the providers in the list when a query is made.</string>
 </resources>

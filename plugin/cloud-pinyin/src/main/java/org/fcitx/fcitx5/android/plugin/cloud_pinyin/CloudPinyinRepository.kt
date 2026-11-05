@@ -5,30 +5,45 @@
 package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.CoroutineScope
+
+data class CloudPinyinConfig(
+    val backends: List<CloudPinyinBackend>,
+    val fallbackEnabled: Boolean
+)
 
 /**
  * Query orchestration: cache, offline short circuit, per-endpoint backoff, duplicate
- * merging, concurrency limit and the overall timeout.
+ * merging, concurrency limit and a single overall time budget.
+ *
+ * When fallback is disabled only the first configured backend is ever attempted. When it
+ * is enabled, backends are tried serially in list order and the first candidate wins.
  */
 class CloudPinyinRepository(
     private val scope: CoroutineScope,
-    private val backendProvider: () -> CloudPinyinBackend,
+    private val configProvider: () -> CloudPinyinConfig,
     private val onlineCheck: () -> Boolean,
-    private val fetcher: suspend (CloudPinyinBackend, String, Long) -> String?,
+    private val fetcher: suspend (
+        backend: CloudPinyinBackend,
+        pinyin: String,
+        requestId: Long,
+        timeoutMillis: Long
+    ) -> CloudPinyinFetchResult,
     private val cache: CloudPinyinCache = CloudPinyinCache(),
     private val backoff: CloudPinyinBackoff = CloudPinyinBackoff(),
     private val timeoutMillis: Long = 900L,
     maxConcurrent: Int = 3,
-    private val disconnect: (Long) -> Unit = {}
+    private val disconnect: (Long) -> Unit = {},
+    private val clock: () -> Long = System::currentTimeMillis
 ) {
     private val semaphore = Semaphore(maxConcurrent)
     private val mutex = Mutex()
@@ -38,20 +53,25 @@ class CloudPinyinRepository(
     private val holders = mutableMapOf<String, Long>()
 
     suspend fun query(pinyin: String, requestId: Long): String? {
-        val backend = backendProvider()
-        if (backend == CloudPinyinBackend.Off) return null
+        val config = configProvider()
+        if (config.backends.isEmpty()) return null
         if (!onlineCheck()) return null
 
         val normalized = pinyin.trim().lowercase()
         if (normalized.isEmpty()) return null
-        val key = backend.key + "\u0000" + normalized
+
+        val attempts = if (config.fallbackEnabled) {
+            config.backends
+        } else {
+            config.backends.take(1)
+        }
+        val key = cacheKey(config.fallbackEnabled, attempts, normalized)
 
         cache.get(key)?.let { return it }
-        if (backoff.isCoolingDown(backend)) return null
 
         val deferred = mutex.withLock {
             inflight[key] ?: scope.async {
-                fetchAndStore(backend, normalized, requestId, key)
+                fetchSequentially(attempts, normalized, requestId, key)
             }.also {
                 inflight[key] = it
                 holders[key] = requestId
@@ -88,35 +108,58 @@ class CloudPinyinRepository(
         }
     }
 
-    private suspend fun fetchAndStore(
-        backend: CloudPinyinBackend,
+    private fun cacheKey(
+        fallbackEnabled: Boolean,
+        attempts: List<CloudPinyinBackend>,
+        normalized: String
+    ): String {
+        val mode = if (fallbackEnabled) "fallback" else "single"
+        val backends = attempts.joinToString("\u0001") { it.key }
+        return "$mode\u0000$backends\u0000$normalized"
+    }
+
+    private suspend fun fetchSequentially(
+        attempts: List<CloudPinyinBackend>,
         pinyin: String,
         requestId: Long,
         key: String
     ): String? {
-        return try {
-            val candidate = semaphore.withPermit {
-                withTimeout(timeoutMillis) {
-                    fetcher(backend, pinyin, requestId)
+        val deadline = clock() + timeoutMillis
+        for (backend in attempts) {
+            if (backoff.isCoolingDown(backend.key)) continue
+            val remaining = deadline - clock()
+            if (remaining <= 0) break
+
+            val result = try {
+                semaphore.withPermit {
+                    withTimeout(remaining) {
+                        fetcher(backend, pinyin, requestId, remaining)
+                    }
                 }
+            } catch (e: TimeoutCancellationException) {
+                backoff.recordFailure(backend.key)
+                disconnect(requestId)
+                continue
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                backoff.recordFailure(backend.key)
+                continue
             }
-            if (candidate.isNullOrEmpty()) {
-                backoff.recordFailure(backend)
-                null
-            } else {
-                cache.put(key, candidate)
-                backoff.recordSuccess(backend)
-                candidate
+
+            when (result) {
+                is CloudPinyinFetchResult.Success -> {
+                    if (result.candidate.isNotEmpty()) {
+                        cache.put(key, result.candidate)
+                        backoff.recordSuccess(backend.key)
+                        return result.candidate
+                    }
+                    backoff.recordFailure(backend.key)
+                }
+
+                is CloudPinyinFetchResult.Failure -> backoff.recordFailure(backend.key)
             }
-        } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
-            // overall request timeout is a normal failure, not a caller cancellation
-            backoff.recordFailure(backend)
-            null
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            backoff.recordFailure(backend)
-            null
         }
+        return null
     }
 }

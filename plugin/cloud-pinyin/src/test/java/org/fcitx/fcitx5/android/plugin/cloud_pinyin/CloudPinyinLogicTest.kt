@@ -37,40 +37,96 @@ class CloudPinyinBackoffTest {
 
     private var now = 0L
     private val backoff = CloudPinyinBackoff { now }
-    private val backend = CloudPinyinBackend.Google
+    private val backendKey = "googlecn"
 
     @Test
     fun testCoolDownStartsAtThreeFailures() {
-        backoff.recordFailure(backend)
-        backoff.recordFailure(backend)
-        assertTrue(!backoff.isCoolingDown(backend))
-        backoff.recordFailure(backend)
-        assertTrue(backoff.isCoolingDown(backend))
+        backoff.recordFailure(backendKey)
+        backoff.recordFailure(backendKey)
+        assertTrue(!backoff.isCoolingDown(backendKey))
+        backoff.recordFailure(backendKey)
+        assertTrue(backoff.isCoolingDown(backendKey))
         now += 60_000
-        assertTrue(!backoff.isCoolingDown(backend))
+        assertTrue(!backoff.isCoolingDown(backendKey))
     }
 
     @Test
     fun testEscalationAndSuccessReset() {
-        repeat(4) { backoff.recordFailure(backend) }
+        repeat(4) { backoff.recordFailure(backendKey) }
         now += 60_000
-        assertTrue(backoff.isCoolingDown(backend))
+        assertTrue(backoff.isCoolingDown(backendKey))
         now += 60_000
-        assertTrue(!backoff.isCoolingDown(backend))
-        backoff.recordSuccess(backend)
-        backoff.recordFailure(backend)
-        backoff.recordFailure(backend)
-        assertTrue(!backoff.isCoolingDown(backend))
+        assertTrue(!backoff.isCoolingDown(backendKey))
+        backoff.recordSuccess(backendKey)
+        backoff.recordFailure(backendKey)
+        backoff.recordFailure(backendKey)
+        assertTrue(!backoff.isCoolingDown(backendKey))
+    }
+
+    @Test
+    fun testEndpointsAreIsolated() {
+        repeat(3) { backoff.recordFailure("a") }
+        assertTrue(backoff.isCoolingDown("a"))
+        assertTrue(!backoff.isCoolingDown("b"))
     }
 }
 
 class CloudPinyinHttpClientTest {
 
+    private val client = CloudPinyinHttpClient(maxBytes = 4 * 1024)
+
     @Test
     fun testBoundedReadRejectsOversize() {
-        val client = CloudPinyinHttpClient(maxBytes = 4 * 1024)
         val body = "a".repeat(4097)
-        assertNull(client.readBounded(body.byteInputStream()))
-        assertEquals("a".repeat(4096), client.readBounded("a".repeat(4096).byteInputStream()))
+        assertEquals(BodyReadResult.Oversize, client.readBody(body.byteInputStream()))
+        assertEquals(BodyReadResult.Empty, client.readBody("".byteInputStream()))
+
+        val content = client.readBody("a".repeat(4096).byteInputStream())
+        assertTrue(content is BodyReadResult.Content)
+        assertEquals(
+            "a".repeat(4096),
+            String((content as BodyReadResult.Content).bytes, Charsets.UTF_8)
+        )
+    }
+
+    @Test
+    fun testEndpointRequiresHttps() {
+        val insecure = checkEndpoint("http://example.com/cloud")
+        assertTrue(insecure is EndpointCheck.Invalid)
+        assertEquals(
+            CloudPinyinFailure.InsecureScheme,
+            (insecure as EndpointCheck.Invalid).reason
+        )
+        assertTrue(checkEndpoint("not a url") is EndpointCheck.Invalid)
+        assertTrue(checkEndpoint(null) is EndpointCheck.Invalid)
+        assertTrue(checkEndpoint("https://example.com/cloud") is EndpointCheck.Valid)
+    }
+
+    @Test
+    fun testStrictUtf8() {
+        assertEquals("你好", decodeUtf8("你好".toByteArray(Charsets.UTF_8)))
+        assertNull(decodeUtf8(byteArrayOf(0x61, 0xFF.toByte())))
+        assertNull(decodeUtf8(byteArrayOf(0xE4.toByte(), 0xBD.toByte())))
+    }
+}
+
+class ProviderListCodecTest {
+
+    @Test
+    fun testRoundTrip() {
+        val entries = listOf(
+            ProviderEntry(CloudPinyinProvider.GoogleCn),
+            ProviderEntry(CloudPinyinProvider.Baidu)
+        )
+        assertEquals(entries, ProviderListCodec.decode(ProviderListCodec.encode(entries)))
+    }
+
+    @Test
+    fun testEmptyAndUnknown() {
+        assertEquals(emptyList<ProviderEntry>(), ProviderListCodec.decode(""))
+        assertEquals(
+            listOf(ProviderEntry(CloudPinyinProvider.Google)),
+            ProviderListCodec.decode("google\nunknown\n")
+        )
     }
 }

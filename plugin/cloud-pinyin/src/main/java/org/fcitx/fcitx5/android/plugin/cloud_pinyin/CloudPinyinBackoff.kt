@@ -5,7 +5,7 @@
 package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 /**
- * Per-endpoint consecutive failure backoff.
+ * Per-endpoint consecutive failure backoff, keyed by [CloudPinyinBackend.key].
  *
  * 3 failures -> 60s, 4 -> 120s, 5+ -> 300s. Any success resets the counter.
  */
@@ -14,15 +14,15 @@ class CloudPinyinBackoff(
 ) {
     private data class State(var failures: Int = 0, var cooldownUntil: Long = 0)
 
-    private val states = mutableMapOf<CloudPinyinBackend, State>()
+    private val states = mutableMapOf<String, State>()
 
     @Synchronized
-    fun isCoolingDown(backend: CloudPinyinBackend): Boolean =
-        (states[backend]?.cooldownUntil ?: 0) > clock()
+    fun isCoolingDown(key: String): Boolean =
+        (states[key]?.cooldownUntil ?: 0) > clock()
 
     @Synchronized
-    fun recordFailure(backend: CloudPinyinBackend) {
-        val state = states.getOrPut(backend) { State() }
+    fun recordFailure(key: String) {
+        val state = states.getOrPut(key) { State() }
         state.failures += 1
         if (state.failures >= 3) {
             state.cooldownUntil = clock() + delayFor(state.failures)
@@ -30,8 +30,8 @@ class CloudPinyinBackoff(
     }
 
     @Synchronized
-    fun recordSuccess(backend: CloudPinyinBackend) {
-        states.remove(backend)
+    fun recordSuccess(key: String) {
+        states.remove(key)
     }
 
     private fun delayFor(failures: Int): Long = when {
