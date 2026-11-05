@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  * SPDX-FileCopyrightText: Copyright 2021-2026 Fcitx5 for Android Contributors
  */
+import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import com.android.build.gradle.internal.tasks.CompileArtProfileTask
@@ -9,6 +10,7 @@ import com.android.build.gradle.internal.tasks.ExpandArtProfileWildcardsTask
 import com.android.build.gradle.internal.tasks.MergeArtProfileTask
 import com.android.build.gradle.tasks.PackageApplication
 import com.mikepenz.aboutlibraries.plugin.AboutLibrariesExtension
+import org.gradle.api.GradleException
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFile
 import org.gradle.api.internal.provider.AbstractProperty
@@ -17,6 +19,30 @@ import org.gradle.api.plugins.BasePluginExtension
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.withType
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.w3c.dom.Element
+import java.io.File
+import javax.xml.parsers.DocumentBuilderFactory
+
+private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
+private const val TOOLS_NS = "http://schemas.android.com/tools"
+private const val INTERNET_PERMISSION = "android.permission.INTERNET"
+
+private fun readManifestPermissions(manifest: File): Set<String> {
+    val document = DocumentBuilderFactory.newInstance().apply {
+        isNamespaceAware = true
+    }.newDocumentBuilder().parse(manifest)
+    val permissions = mutableSetOf<String>()
+    for (tag in listOf("uses-permission", "uses-permission-sdk-23", "permission")) {
+        val nodes = document.getElementsByTagName(tag)
+        for (i in 0 until nodes.length) {
+            val element = nodes.item(i) as? Element ?: continue
+            if (element.getAttributeNS(TOOLS_NS, "node") == "remove") continue
+            val name = element.getAttributeNS(ANDROID_NS, "name")
+            if (name.isNotBlank()) permissions.add(name)
+        }
+    }
+    return permissions
+}
 
 /**
  * The prototype of an Android Application
@@ -138,6 +164,85 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
                     // https://www.norio.be/blog/archivesBaseName-removed-from-gradle9.html
                     target.extensions.configure<BasePluginExtension> {
                         archivesName.set("$applicationId-$versionName")
+                    }
+                }
+            }
+        }
+
+        if (target.path == ":app") {
+            val verifyAppPermissions = target.tasks.register("verifyAppPermissions") {
+                group = "verification"
+                description = "Verify merged app manifests contain only allowed permissions and never INTERNET"
+            }
+            val verifyInternetScope = target.tasks.register("verifyManifestInternetScope") {
+                group = "verification"
+                description = "Verify INTERNET is only declared by plugin modules"
+                val manifests = target.rootProject.fileTree(target.rootProject.projectDir) {
+                    include("**/src/**/AndroidManifest.xml")
+                }
+                doLast {
+                    val rootDir = target.rootProject.projectDir
+                    manifests.files.sortedBy { it.path }.forEach { manifest ->
+                        val relative = manifest.relativeTo(rootDir).invariantSeparatorsPath
+                        if (!relative.startsWith("app/") && !relative.startsWith("lib/")) {
+                            return@forEach
+                        }
+                        if (INTERNET_PERMISSION in readManifestPermissions(manifest)) {
+                            throw GradleException(
+                                "$relative: $INTERNET_PERMISSION is only allowed in plugin modules"
+                            )
+                        }
+                    }
+                }
+            }
+            verifyAppPermissions.configure {
+                dependsOn(verifyInternetScope)
+            }
+            target.tasks.configureEach {
+                if (name == "check") dependsOn(verifyAppPermissions)
+            }
+
+            target.extensions.configure<ApplicationAndroidComponentsExtension> {
+                onVariants { variant ->
+                    val mergedManifest = variant.artifacts.get(SingleArtifact.MERGED_MANIFEST)
+                    val verifyVariant = target.tasks.register(
+                        "verify${variant.name.capitalized()}AppPermissions"
+                    ) {
+                        group = "verification"
+                        description = "Verify merged ${variant.name} manifest permissions"
+                        inputs.file(mergedManifest)
+                        doLast {
+                            val manifestFile = mergedManifest.get().asFile
+                            val permissions = readManifestPermissions(manifestFile)
+                            if (INTERNET_PERMISSION in permissions) {
+                                throw GradleException(
+                                    "${manifestFile.path}: $INTERNET_PERMISSION is forbidden in the main app"
+                                )
+                            }
+                            val applicationId = variant.applicationId.get()
+                            val allowed = setOf(
+                                "android.permission.VIBRATE",
+                                "android.permission.POST_NOTIFICATIONS",
+                                "$applicationId.permission.PLUGIN",
+                                "$applicationId.permission.IPC"
+                            )
+                            val unexpected = permissions - allowed
+                            if (unexpected.isNotEmpty()) {
+                                throw GradleException(
+                                    "${manifestFile.path}: unexpected permissions " +
+                                        "${unexpected.sorted().joinToString()} " +
+                                        "(allowed: ${allowed.sorted().joinToString()})"
+                                )
+                            }
+                        }
+                    }
+                    verifyAppPermissions.configure {
+                        dependsOn(verifyVariant)
+                    }
+                    target.tasks.configureEach {
+                        if (name == "assemble${variant.name.capitalized()}") {
+                            dependsOn(verifyVariant)
+                        }
                     }
                 }
             }

@@ -25,3 +25,4 @@ jobs:
         run: |
           nix develop .#noAS --command ./gradlew :app:assembleRelease
           nix develop .#noAS --command ./gradlew :assembleReleasePlugins
+          nix develop .#noAS --command ./gradlew verifyAppPermissions
