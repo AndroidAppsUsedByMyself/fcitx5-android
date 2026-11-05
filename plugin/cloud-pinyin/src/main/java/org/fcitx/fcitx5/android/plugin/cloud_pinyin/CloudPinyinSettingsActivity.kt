@@ -8,9 +8,11 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -85,15 +87,31 @@ class CloudPinyinSettingsActivity : Activity() {
                 text = getString(entry.provider.labelRes)
                 setTypeface(Typeface.DEFAULT_BOLD)
             })
-            entry.provider.endpointLabel?.let { endpoint ->
+            val subtitle = if (entry.provider == CloudPinyinProvider.Custom) {
+                entry.customUrl
+            } else {
+                entry.provider.endpointLabel
+            }
+            subtitle?.let {
                 addView(TextView(this@CloudPinyinSettingsActivity).apply {
-                    text = endpoint
+                    text = it
                     textSize = 12f
                     alpha = 0.7f
                 })
             }
         }
         row.addView(labels)
+        if (entry.provider == CloudPinyinProvider.Custom) {
+            row.addView(smallButton(getString(R.string.settings_custom_edit), true) {
+                showCustomUrlDialog(entry.customUrl) { url ->
+                    val updated = all.toMutableList().apply {
+                        set(index, ProviderEntry(CloudPinyinProvider.Custom, url))
+                    }
+                    CloudPinyinSettings.setProviders(this, updated)
+                    render()
+                }
+            })
+        }
         row.addView(smallButton(getString(R.string.settings_provider_up), index > 0) {
             move(index, -1, all)
         })
@@ -123,6 +141,27 @@ class CloudPinyinSettingsActivity : Activity() {
             .setTitle(R.string.settings_add_provider)
             .setItems(labels) { _, which ->
                 val provider = providers[which]
+                if (provider == CloudPinyinProvider.Custom) {
+                    showCustomUrlDialog(null) { url ->
+                        if (existing.any {
+                                it.provider == CloudPinyinProvider.Custom && it.customUrl == url
+                            }
+                        ) {
+                            Toast.makeText(
+                                this,
+                                R.string.settings_provider_duplicate,
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@showCustomUrlDialog
+                        }
+                        CloudPinyinSettings.setProviders(
+                            this,
+                            existing + ProviderEntry(CloudPinyinProvider.Custom, url)
+                        )
+                        render()
+                    }
+                    return@setItems
+                }
                 if (existing.any { it.provider == provider }) {
                     Toast.makeText(
                         this,
@@ -136,6 +175,35 @@ class CloudPinyinSettingsActivity : Activity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun showCustomUrlDialog(existing: String?, onAccept: (String) -> Unit) {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+            setText(existing.orEmpty())
+            setSelection(text.length)
+            hint = "https://example.com/cloud"
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.settings_custom_url_title)
+            .setMessage(R.string.settings_custom_url_contract)
+            .setView(input)
+            .setPositiveButton(R.string.settings_save, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val url = CustomEndpointUrl.normalize(input.text.toString())
+                if (url == null) {
+                    input.error = getString(R.string.settings_custom_url_invalid)
+                    return@setOnClickListener
+                }
+                onAccept(url)
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     private fun heading(text: String) = TextView(this).apply {

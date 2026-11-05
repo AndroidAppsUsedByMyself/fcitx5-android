@@ -129,4 +129,25 @@ class ProviderListCodecTest {
             ProviderListCodec.decode("google\nunknown\n")
         )
     }
+
+    @Test
+    fun testCustomUrlRoundTrip() {
+        val entries = listOf(
+            ProviderEntry(
+                CloudPinyinProvider.Custom,
+                "https://example.com/cloud?a=1&b=2"
+            ),
+            ProviderEntry(CloudPinyinProvider.GoogleCn)
+        )
+        assertEquals(entries, ProviderListCodec.decode(ProviderListCodec.encode(entries)))
+    }
+
+    @Test
+    fun testCustomWithoutUrlIsDropped() {
+        assertEquals(emptyList<ProviderEntry>(), ProviderListCodec.decode("custom"))
+        assertEquals(
+            emptyList<ProviderEntry>(),
+            ProviderListCodec.decode("custom\t")
+        )
+    }
 }

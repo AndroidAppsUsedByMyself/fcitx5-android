@@ -7,6 +7,7 @@
     <string name="provider_google_cn">Google CN (recommended)</string>
     <string name="provider_google">Google inputtools</string>
     <string name="provider_baidu">Baidu olime</string>
+    <string name="provider_custom">Custom endpoint</string>
     <string name="settings_providers_title">Providers (highest priority first)</string>
     <string name="settings_providers_empty">No provider configured. Cloud Pinyin will not send any request.</string>
     <string name="settings_add_provider">Add provider</string>
@@ -16,5 +17,10 @@
     <string name="settings_provider_duplicate">This provider is already in the list.</string>
     <string name="settings_fallback_title">Fall back to the next provider on failure</string>
     <string name="settings_fallback_warning">Off by default. When enabled, providers are tried in list order until one returns a candidate. This adds latency, may send the same pinyin to several third parties, and different providers may return different candidates.</string>
+    <string name="settings_custom_edit">URL</string>
+    <string name="settings_custom_url_title">Custom endpoint URL</string>
+    <string name="settings_custom_url_contract">HTTPS GET only. Pinyin is appended as query parameter q. The response must be UTF-8 JSON like {"candidates":["…"]}, at most 4KB; the first non-empty string wins.</string>
+    <string name="settings_custom_url_invalid">Enter a valid HTTPS URL without a fragment.</string>
+    <string name="settings_save">Save</string>
     <string name="settings_disclaimer">These third-party endpoints have no official SLA and may stop working at any time. Pinyin text is sent only to the providers in the list when a query is made.</string>
 </resources>

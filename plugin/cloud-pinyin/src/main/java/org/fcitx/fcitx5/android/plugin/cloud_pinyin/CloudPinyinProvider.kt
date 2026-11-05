@@ -14,7 +14,8 @@ enum class CloudPinyinProvider(
 ) {
     GoogleCn("googlecn", R.string.provider_google_cn, "www.google.cn"),
     Google("google", R.string.provider_google, "www.google.com"),
-    Baidu("baidu", R.string.provider_baidu, "olimenew.baidu.com");
+    Baidu("baidu", R.string.provider_baidu, "olimenew.baidu.com"),
+    Custom("custom", R.string.provider_custom, null);
 
     companion object {
         fun fromId(id: String?): CloudPinyinProvider? =
@@ -22,4 +23,7 @@ enum class CloudPinyinProvider(
     }
 }
 
-data class ProviderEntry(val provider: CloudPinyinProvider)
+data class ProviderEntry(
+    val provider: CloudPinyinProvider,
+    val customUrl: String? = null
+)
