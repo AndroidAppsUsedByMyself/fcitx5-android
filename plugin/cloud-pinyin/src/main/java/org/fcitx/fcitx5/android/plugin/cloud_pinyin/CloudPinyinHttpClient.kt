@@ -64,7 +64,7 @@ fun decodeUtf8(bytes: ByteArray): String? = runCatching {
  */
 class CloudPinyinHttpClient(
     private val maxBytes: Int = 4 * 1024,
-    private val maxAttemptMillis: Long = 300L
+    private val maxAttemptMillis: Long = 700L
 ) {
 
     private val connections = ConcurrentHashMap<Long, HttpURLConnection>()
