@@ -3,4 +3,7 @@
     <apiVersion>0.1</apiVersion>
     <domain>fcitx5-unikey</domain>
     <description>@string/description</description>
+    <provides>
+        <addon>unikey</addon>
+    </provides>
 </plugin>

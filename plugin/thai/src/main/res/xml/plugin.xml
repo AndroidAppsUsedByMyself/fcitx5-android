@@ -3,4 +3,7 @@
     <apiVersion>0.1</apiVersion>
     <domain>fcitx5-libthai</domain>
     <description>@string/description</description>
+    <provides>
+        <addon>libthai</addon>
+    </provides>
 </plugin>

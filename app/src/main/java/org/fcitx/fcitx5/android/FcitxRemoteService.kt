@@ -62,7 +62,7 @@ class FcitxRemoteService : Service() {
         override fun getPid(): Int = Process.myPid()
 
         override fun getLoadedPlugins(): MutableMap<String, String> =
-            DataManager.getLoadedPlugins().map {
+            DataManager.getMergedPlugins().map {
                 it.packageName to it.versionName
             }.let { mutableMapOf<String, String>().apply { putAll(it) } }
 

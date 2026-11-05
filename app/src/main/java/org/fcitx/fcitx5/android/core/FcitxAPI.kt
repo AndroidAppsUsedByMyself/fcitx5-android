@@ -85,6 +85,8 @@ interface FcitxAPI {
     suspend fun setImConfig(key: String, config: RawConfig)
 
     suspend fun addons(): Array<AddonInfo>
+    suspend fun loadedAddonNames(): Array<String>
+    suspend fun onDemandAddonNames(): Array<String>
     suspend fun setAddonState(name: Array<String>, state: BooleanArray)
 
     suspend fun triggerQuickPhrase()

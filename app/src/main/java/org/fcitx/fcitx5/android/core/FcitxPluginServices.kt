@@ -54,7 +54,9 @@ object FcitxPluginServices {
         }
     }
 
-    private val connections = mutableMapOf<String, PluginServiceConnection>()
+    private val connections = java.util.concurrent.ConcurrentHashMap<String, PluginServiceConnection>()
+
+    fun isBound(packageName: String): Boolean = connections.containsKey(packageName)
 
     private fun connectPlugin(descriptor: PluginDescriptor) {
         val connection = PluginServiceConnection(descriptor.packageName) {
@@ -77,7 +79,7 @@ object FcitxPluginServices {
     }
 
     fun connectAll() {
-        DataManager.getLoadedPlugins().forEach {
+        DataManager.getMergedPlugins().forEach {
             if (it.hasService && !connections.containsKey(it.packageName)) {
                 connectPlugin(it)
             }

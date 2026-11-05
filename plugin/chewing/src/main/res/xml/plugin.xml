@@ -3,4 +3,7 @@
     <apiVersion>0.1</apiVersion>
     <domain>fcitx5-chewing</domain>
     <description>@string/description</description>
+    <provides>
+        <addon>chewing</addon>
+    </provides>
 </plugin>

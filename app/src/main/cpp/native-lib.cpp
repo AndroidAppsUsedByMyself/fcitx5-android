@@ -316,6 +316,28 @@ public:
         return addons;
     }
 
+    std::vector<std::string> loadedAddonNames() {
+        return p_instance->addonManager().loadedAddonNames();
+    }
+
+    std::vector<std::string> onDemandAddonNames() {
+        std::vector<std::string> names;
+        auto &addonManager = p_instance->addonManager();
+        for (const auto category: {fcitx::AddonCategory::InputMethod,
+                                   fcitx::AddonCategory::Frontend,
+                                   fcitx::AddonCategory::Loader,
+                                   fcitx::AddonCategory::Module,
+                                   fcitx::AddonCategory::UI}) {
+            for (const auto &name: addonManager.addonNames(category)) {
+                const auto *info = addonManager.addonInfo(name);
+                if (info && info->onDemand()) {
+                    names.emplace_back(info->uniqueName());
+                }
+            }
+        }
+        return names;
+    }
+
     void setAddonState(const std::map<std::string, bool> &state) {
         auto &globalConfig = p_instance->globalConfig();
         auto &addonManager = p_instance->addonManager();
@@ -486,6 +508,16 @@ private:
 #define RETURN_VALUE_IF_NOT_RUNNING(v) DO_IF_NOT_RUNNING(return (v))
 
 GlobalRefSingleton *GlobalRef;
+
+static jobjectArray stringArrayToJObjectArray(JNIEnv *env, const std::vector<std::string> &values) {
+    jobjectArray array = env->NewObjectArray(
+            static_cast<jint>(values.size()), env->FindClass("java/lang/String"), nullptr);
+    for (size_t i = 0; i < values.size(); i++) {
+        JRef<jstring> string(env, env->NewStringUTF(values[i].c_str()));
+        env->SetObjectArrayElement(array, static_cast<jint>(i), string);
+    }
+    return array;
+}
 
 JNIEXPORT jint JNICALL
 JNI_OnLoad(JavaVM *jvm, void * /* reserved */) {
@@ -956,6 +988,20 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxAddons(JNIEnv *env, jclass claz
         env->SetObjectArrayElement(array, i++, obj);
     }
     return array;
+}
+
+extern "C"
+JNIEXPORT jobjectArray JNICALL
+Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxLoadedAddonNames(JNIEnv *env, jclass clazz) {
+    RETURN_VALUE_IF_NOT_RUNNING(nullptr)
+    return stringArrayToJObjectArray(env, Fcitx::Instance().loadedAddonNames());
+}
+
+extern "C"
+JNIEXPORT jobjectArray JNICALL
+Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxOnDemandAddonNames(JNIEnv *env, jclass clazz) {
+    RETURN_VALUE_IF_NOT_RUNNING(nullptr)
+    return stringArrayToJObjectArray(env, Fcitx::Instance().onDemandAddonNames());
 }
 
 extern "C"

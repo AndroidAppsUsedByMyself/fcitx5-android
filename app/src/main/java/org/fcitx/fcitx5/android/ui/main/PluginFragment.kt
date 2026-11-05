@@ -13,15 +13,23 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.FcitxPluginServices
+import org.fcitx.fcitx5.android.core.data.AddonRuntimeSnapshot
+import org.fcitx.fcitx5.android.core.data.AddonStatus
 import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.core.data.FileSource
+import org.fcitx.fcitx5.android.core.data.PluginDescriptor
 import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
 import org.fcitx.fcitx5.android.core.data.PluginManifestActions
+import org.fcitx.fcitx5.android.core.data.PluginServiceState
+import org.fcitx.fcitx5.android.core.data.PluginState
+import org.fcitx.fcitx5.android.core.data.PluginStateResolver
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.utils.addCategory
@@ -31,8 +39,11 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private var firstRun = true
 
+    private val viewModel: MainViewModel by activityViewModels()
+
     private lateinit var synced: DataManager.PluginSet
     private lateinit var detected: DataManager.PluginSet
+    private var addonRuntime = AddonRuntimeSnapshot()
 
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -40,36 +51,46 @@ class PluginFragment : PaddingPreferenceFragment() {
         }
     }
 
-    private fun DataManager.whenSynced(block: () -> Unit) {
-        lifecycleScope.launch {
-            if (!synced) {
-                suspendCancellableCoroutine {
-                    if (synced) {
+    private suspend fun DataManager.whenSynced() {
+        if (!synced) {
+            suspendCancellableCoroutine {
+                if (synced) {
+                    it.resumeWith(Result.success(Unit))
+                } else {
+                    addOnNextSyncedCallback {
                         it.resumeWith(Result.success(Unit))
-                    } else {
-                        addOnNextSyncedCallback {
-                            it.resumeWith(Result.success(Unit))
-                        }
                     }
                 }
             }
-            block.invoke()
         }
     }
 
+    private suspend fun queryAddonRuntime(): AddonRuntimeSnapshot =
+        viewModel.fcitx.runOnReady {
+            AddonRuntimeSnapshot(
+                loaded = loadedAddonNames().toSet(),
+                onDemand = onDemandAddonNames().toSet()
+            )
+        }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-        DataManager.whenSynced {
+        lifecycleScope.launch {
+            DataManager.whenSynced()
             synced = DataManager.getSyncedPluginSet()
             detected = DataManager.detectPlugins()
+            addonRuntime = queryAddonRuntime()
             preferenceScreen = createPreferenceScreen()
         }
     }
 
     private fun refreshPreferencesWhenNeeded() {
-        DataManager.whenSynced {
+        lifecycleScope.launch {
+            DataManager.whenSynced()
             val newDetected = DataManager.detectPlugins()
-            if (detected != newDetected) {
+            val newRuntime = queryAddonRuntime()
+            if (detected != newDetected || addonRuntime != newRuntime) {
                 detected = newDetected
+                addonRuntime = newRuntime
                 preferenceScreen = createPreferenceScreen()
             }
         }
@@ -105,16 +126,19 @@ class PluginFragment : PaddingPreferenceFragment() {
             if (synced != detected) {
                 addPreference(R.string.plugin_needs_reload, icon = R.drawable.ic_baseline_info_24) {
                     DataManager.addOnNextSyncedCallback {
-                        synced = DataManager.getSyncedPluginSet()
-                        detected = DataManager.detectPlugins()
-                        preferenceScreen = createPreferenceScreen()
+                        lifecycleScope.launch {
+                            synced = DataManager.getSyncedPluginSet()
+                            detected = DataManager.detectPlugins()
+                            addonRuntime = queryAddonRuntime()
+                            preferenceScreen = createPreferenceScreen()
+                        }
                     }
                     // DataManager.sync and and restart fcitx
                     FcitxDaemon.restartFcitx()
                 }
             }
-            val (loaded, failed) = synced
-            if (loaded.isEmpty() && failed.isEmpty()) {
+            val (merged, failed) = synced
+            if (merged.isEmpty() && failed.isEmpty()) {
                 // use PreferenceCategory to show a divider below the "reload" preference
                 addCategory(R.string.no_plugins) {
                     isIconSpaceReserved = false
@@ -125,12 +149,17 @@ class PluginFragment : PaddingPreferenceFragment() {
                 }
                 return@apply
             }
-            if (loaded.isNotEmpty()) {
+            if (merged.isNotEmpty()) {
                 addCategory(R.string.plugins_loaded) {
                     isIconSpaceReserved = false
-                    loaded.forEach {
-                        addPreference(it.packageName, "${it.versionName}\n${it.description}") {
-                            startPluginAboutActivity(it.packageName)
+                    merged.sortedBy { it.packageName }.forEach { descriptor ->
+                        val state = PluginStateResolver.resolve(
+                            descriptor,
+                            addonRuntime,
+                            FcitxPluginServices.isBound(descriptor.packageName)
+                        )
+                        addPreference(descriptor.packageName, pluginSummary(descriptor, state)) {
+                            startPluginAboutActivity(descriptor.packageName)
                         }
                     }
                 }
@@ -176,6 +205,43 @@ class PluginFragment : PaddingPreferenceFragment() {
                 }
             }
         }
+
+    private fun pluginSummary(
+        descriptor: PluginDescriptor,
+        state: PluginState.Active
+    ): String {
+        val lines = mutableListOf("${descriptor.versionName}\n${descriptor.description}")
+        if (state.addons.isEmpty()) {
+            lines += getString(R.string.plugin_addon_none)
+        } else {
+            val loaded = state.addons.filterValues { it == AddonStatus.Loaded }.keys
+            val available = state.addons.filterValues { it == AddonStatus.AvailableNotLoaded }.keys
+            val notLoaded = state.addons.filterValues { it == AddonStatus.NotLoaded }.keys
+            if (loaded.isNotEmpty()) {
+                lines += getString(R.string.plugin_addons_loaded, loaded.joinToString())
+            }
+            if (available.isNotEmpty()) {
+                lines += getString(R.string.plugin_addons_available, available.joinToString())
+            }
+            if (notLoaded.isNotEmpty()) {
+                lines += getString(R.string.plugin_addons_not_loaded, notLoaded.joinToString())
+            }
+        }
+        when (val service = state.service) {
+            PluginServiceState.NotDeclared -> {}
+            is PluginServiceState.Bound -> {
+                lines += service.protocolVersion?.let {
+                    getString(R.string.plugin_service_bound, it)
+                } ?: getString(R.string.plugin_service_bound_unknown)
+            }
+            is PluginServiceState.NotBound -> {
+                lines += service.protocolVersion?.let {
+                    getString(R.string.plugin_service_not_bound, it)
+                } ?: getString(R.string.plugin_service_not_bound_unknown)
+            }
+        }
+        return lines.joinToString("\n")
+    }
 
     private fun startPluginAboutActivity(pkg: String): Boolean {
         val ctx = requireContext()

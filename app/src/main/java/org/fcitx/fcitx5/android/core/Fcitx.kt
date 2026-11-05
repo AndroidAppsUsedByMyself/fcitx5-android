@@ -155,6 +155,10 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
     }
 
     override suspend fun addons() = withFcitxContext { getFcitxAddons() ?: emptyArray() }
+    override suspend fun loadedAddonNames() =
+        withFcitxContext { getFcitxLoadedAddonNames() ?: emptyArray() }
+    override suspend fun onDemandAddonNames() =
+        withFcitxContext { getFcitxOnDemandAddonNames() ?: emptyArray() }
     override suspend fun setAddonState(name: Array<String>, state: BooleanArray) =
         withFcitxContext { setFcitxAddonState(name, state) }
 
@@ -333,6 +337,12 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         external fun getFcitxAddons(): Array<AddonInfo>?
 
         @JvmStatic
+        external fun getFcitxLoadedAddonNames(): Array<String>?
+
+        @JvmStatic
+        external fun getFcitxOnDemandAddonNames(): Array<String>?
+
+        @JvmStatic
         external fun setFcitxAddonState(name: Array<String>, state: BooleanArray)
 
         @JvmStatic
@@ -425,7 +435,7 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             DataManager.sync()
             val locale = Locales.fcitxLocale
             val dataDir = DataManager.dataDir.absolutePath
-            val plugins = DataManager.getLoadedPlugins()
+            val plugins = DataManager.getMergedPlugins()
             val nativeLibDir = StringBuilder(context.applicationInfo.nativeLibraryDir)
             val extDomains = arrayListOf<String>()
             plugins.forEach {

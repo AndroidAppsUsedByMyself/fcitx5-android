@@ -3,4 +3,7 @@
     <apiVersion>0.1</apiVersion>
     <domain>fcitx5-anthy</domain>
     <description>@string/description</description>
+    <provides>
+        <addon>anthy</addon>
+    </provides>
 </plugin>

@@ -36,7 +36,7 @@ import kotlin.concurrent.withLock
 object DataManager {
 
     data class PluginSet(
-        val loaded: Set<PluginDescriptor>,
+        val merged: Set<PluginDescriptor>,
         val failed: Map<String, PluginLoadFailed>
     )
 
@@ -72,13 +72,13 @@ object DataManager {
             .let { deserializeDataDescriptor(it) }
     }
 
-    private val loadedPlugins = mutableSetOf<PluginDescriptor>()
+    private val mergedPlugins = mutableSetOf<PluginDescriptor>()
     private val failedPlugins = mutableMapOf<String, PluginLoadFailed>()
 
-    fun getLoadedPlugins(): Set<PluginDescriptor> = loadedPlugins
+    fun getMergedPlugins(): Set<PluginDescriptor> = mergedPlugins
     fun getFailedPlugins(): Map<String, PluginLoadFailed> = failedPlugins
 
-    fun getSyncedPluginSet() = PluginSet(loadedPlugins, failedPlugins)
+    fun getSyncedPluginSet() = PluginSet(mergedPlugins, failedPlugins)
 
     /**
      * Will be cleared after each sync
@@ -236,7 +236,7 @@ object DataManager {
 
     fun sync() = lock.withLock {
         synced = false
-        loadedPlugins.clear()
+        mergedPlugins.clear()
         failedPlugins.clear()
 
         val destDescriptorFile = File(dataDir, BuildConfig.DATA_DESCRIPTOR_NAME)
@@ -288,7 +288,7 @@ object DataManager {
                 continue
             }
             pluginAssets[plugin.packageName] = assets
-            loadedPlugins.add(plugin)
+            mergedPlugins.add(plugin)
             Timber.d("Merged data hierarchy of ${plugin.packageName}")
         }
 

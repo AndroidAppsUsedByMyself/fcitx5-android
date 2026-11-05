@@ -214,7 +214,7 @@
     <string name="delete_theme_msg">Do you really want to delete theme \"%1$s\"?</string>
     <string name="capture_heap_dump">Capture heap dump</string>
     <string name="plugins">Plugins</string>
-    <string name="plugins_loaded">Loaded</string>
+    <string name="plugins_loaded">Plugins</string>
     <string name="plugins_failed">Load failed</string>
     <string name="missing_plugin_descriptor">Missing plugin descriptor</string>
     <string name="invalid_plugin_descriptor">Invalid plugin descriptor</string>
@@ -224,6 +224,14 @@
     <string name="path_conflict">Path \"%1$s\" is already owned by %2$s</string>
     <string name="plugin_service_unavailable">Declared service is unavailable: %1$s</string>
     <string name="plugin_asset_path_violation">Plugin asset path escapes its root: %1$s</string>
+    <string name="plugin_addon_none">Merged (no addon declared)</string>
+    <string name="plugin_addons_loaded">Addons loaded: %1$s</string>
+    <string name="plugin_addons_available">Available on demand: %1$s</string>
+    <string name="plugin_addons_not_loaded">Addons not loaded: %1$s</string>
+    <string name="plugin_service_bound">Service bound (protocol %1$d)</string>
+    <string name="plugin_service_bound_unknown">Service bound (protocol unknown)</string>
+    <string name="plugin_service_not_bound">Service declared but not bound (protocol %1$d)</string>
+    <string name="plugin_service_not_bound_unknown">Service declared but not bound (protocol unknown)</string>
     <string name="main_program">main program</string>
     <string name="edit_theme">Edit Theme</string>
     <string name="show_voice_input_button">Show voice input button</string>
