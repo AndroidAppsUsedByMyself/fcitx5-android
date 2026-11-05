@@ -224,6 +224,8 @@
     <string name="plugin_capability_internet">Requests INTERNET permission</string>
     <string name="plugin_capability_ipc">Declares IPC service</string>
     <string name="plugin_disabled">Disabled</string>
+    <string name="plugin_open_settings">Open plugin settings</string>
+    <string name="plugin_settings_unavailable">Plugin settings activity is unavailable</string>
     <string name="plugin_third_party_trust_title">Enable third-party plugin?</string>
     <string name="plugin_third_party_trust_message">%1$s is not signed by a trusted certificate. It may receive your input content and may use network access. Enable only if you trust this publisher.</string>
     <string name="plugin_enabled_restart">Plugin enabled; restarting Fcitx</string>

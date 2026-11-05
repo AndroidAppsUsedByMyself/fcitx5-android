@@ -153,7 +153,8 @@ object DataManager {
                         versionName = info.versionName ?: "",
                         nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: "",
                         signerFingerprint = fingerprints.minOrNull(),
-                        requestsInternet = info.requestedPermissions?.contains(INTERNET_PERMISSION) == true
+                        requestsInternet = info.requestedPermissions?.contains(INTERNET_PERMISSION) == true,
+                        settingsActivity = manifest.settingsActivity
                     )
                 )
             } else {

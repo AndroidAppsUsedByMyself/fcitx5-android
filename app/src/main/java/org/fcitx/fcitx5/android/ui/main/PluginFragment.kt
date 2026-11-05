@@ -197,6 +197,11 @@ class PluginFragment : PaddingPreferenceFragment() {
                                 false
                             }
                         })
+                        if (enabled && descriptor.settingsActivity != null) {
+                            addPreference(R.string.plugin_open_settings) {
+                                startPluginSettingsActivity(descriptor)
+                            }
+                        }
                     }
                 }
             }
@@ -341,6 +346,26 @@ class PluginFragment : PaddingPreferenceFragment() {
                 setPluginEnabled(descriptor, true)
             }
             .show()
+    }
+
+    private fun startPluginSettingsActivity(descriptor: PluginDescriptor) {
+        val className = descriptor.settingsActivity ?: return
+        val component = ComponentName(
+            descriptor.packageName,
+            if (className.startsWith(".")) descriptor.packageName + className else className
+        )
+        runCatching {
+            startActivity(Intent().apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                this.component = component
+            })
+        }.onFailure {
+            Toast.makeText(
+                requireContext(),
+                R.string.plugin_settings_unavailable,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     private fun startPluginAboutActivity(pkg: String): Boolean {

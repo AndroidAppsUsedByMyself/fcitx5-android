@@ -41,7 +41,11 @@ data class PluginManifest(
      */
     val hasService: Boolean,
     val provides: PluginProvides?,
-    val service: PluginService?
+    val service: PluginService?,
+    /**
+     * Optional settings activity class, resolved by the host via an explicit component.
+     */
+    val settingsActivity: String?
 )
 
 /**
@@ -53,7 +57,8 @@ data class RawPluginManifest(
     val description: String? = null,
     val hasService: Boolean = false,
     val provides: PluginProvides? = null,
-    val service: PluginService? = null
+    val service: PluginService? = null,
+    val settingsActivity: String? = null
 )
 
 enum class PluginManifestRejection(val technicalMessage: String) {
@@ -62,7 +67,8 @@ enum class PluginManifestRejection(val technicalMessage: String) {
     InvalidDomain("domain contains characters outside [A-Za-z0-9._-]"),
     ReservedDomain("domain is reserved by the host"),
     InvalidService("service declaration is incomplete"),
-    InvalidDataRoot("provides/dataRoot is not a safe relative path")
+    InvalidDataRoot("provides/dataRoot is not a safe relative path"),
+    InvalidSettingsActivity("settingsActivity is malformed")
 }
 
 sealed interface PluginManifestResult {
@@ -75,6 +81,7 @@ object PluginManifestValidator {
 
     private val apiVersionPattern = Regex("[0-9]+(\\.[0-9]+)*")
     private val domainPattern = Regex("[A-Za-z0-9._-]+")
+    private val componentPattern = Regex("[A-Za-z0-9_.$]+")
 
     /**
      * gettext domains owned by the host; a plugin must not reuse them.
@@ -115,6 +122,11 @@ object PluginManifestValidator {
             }
         }
 
+        val settingsActivity = raw.settingsActivity?.trim()?.takeIf { it.isNotEmpty() }
+        if (settingsActivity != null && !componentPattern.matches(settingsActivity)) {
+            return PluginManifestResult.Invalid(PluginManifestRejection.InvalidSettingsActivity)
+        }
+
         return PluginManifestResult.Parsed(
             PluginManifest(
                 apiVersion = apiVersion,
@@ -122,7 +134,8 @@ object PluginManifestValidator {
                 description = raw.description,
                 hasService = raw.hasService,
                 provides = raw.provides,
-                service = service
+                service = service,
+                settingsActivity = settingsActivity
             )
         )
     }
@@ -168,6 +181,7 @@ object PluginManifestParser {
         var seesService = false
         var component: String? = null
         var action: String? = null
+        var settingsActivity: String? = null
         var protocolVersion: Int? = null
         val addons = mutableListOf<String>()
         val libraries = mutableListOf<String>()
@@ -208,6 +222,7 @@ object PluginManifestParser {
                         "protocolVersion" -> if (inService) {
                             protocolVersion = value?.toIntOrNull() ?: -1
                         }
+                        "settingsActivity" -> settingsActivity = value
                         "provides" -> inProvides = false
                         "service" -> inService = false
                     }
@@ -231,7 +246,8 @@ object PluginManifestParser {
                     action = action.orEmpty(),
                     protocolVersion = protocolVersion ?: -1
                 )
-            } else null
+            } else null,
+            settingsActivity = settingsActivity
         )
     }
 

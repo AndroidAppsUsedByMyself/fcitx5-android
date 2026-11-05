@@ -143,7 +143,11 @@ data class PluginDescriptor(
     /**
      * Whether the plugin APK itself requests `android.permission.INTERNET`.
      */
-    val requestsInternet: Boolean = false
+    val requestsInternet: Boolean = false,
+    /**
+     * Optional settings activity class declared by the plugin.
+     */
+    val settingsActivity: String? = null
 ) {
     val builtForHost: Boolean = matchedAction in PluginManifestActions.hostActions
 

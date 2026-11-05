@@ -11,4 +11,5 @@
         <action>@string/ipc_service_action</action>
         <protocolVersion>1</protocolVersion>
     </service>
+    <settingsActivity>.CloudPinyinSettingsActivity</settingsActivity>
 </plugin>

@@ -76,6 +76,51 @@ class CloudPinyinRepositoryTest {
     }
 
     @Test
+    fun testCancellingWaiterKeepsHolderResult() = runBlocking {
+        var disconnects = 0
+        val repo = CloudPinyinRepository(
+            scope = this,
+            backendProvider = { CloudPinyinBackend.Google },
+            onlineCheck = { true },
+            fetcher = { _, _, _ ->
+                delay(100)
+                "候选"
+            },
+            disconnect = { disconnects += 1 }
+        )
+        val holder = async { repo.query("nihao", 1) }
+        delay(20)
+        val waiter = async { repo.query("nihao", 2) }
+        delay(20)
+        repo.cancel(2)
+        delay(20)
+        assertEquals("候选", holder.await())
+        assertEquals("候选", waiter.await())
+        assertEquals(0, disconnects)
+    }
+
+    @Test
+    fun testCancellingHolderDisconnects() = runBlocking {
+        var disconnects = 0
+        val repo = CloudPinyinRepository(
+            scope = this,
+            backendProvider = { CloudPinyinBackend.Google },
+            onlineCheck = { true },
+            fetcher = { _, _, _ ->
+                delay(200)
+                "候选"
+            },
+            disconnect = { disconnects += 1 }
+        )
+        val holder = async { repo.query("nihao", 1) }
+        delay(30)
+        repo.cancel(1)
+        delay(30)
+        runCatching { holder.await() }
+        assertEquals(1, disconnects)
+    }
+
+    @Test
     fun testFailureBacksOff() = runBlocking {
         var calls = 0
         val repo = repository(this) { _, _, _ ->

@@ -12,6 +12,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -33,6 +34,9 @@ class CloudPinyinRepository(
     private val mutex = Mutex()
     private val inflight = mutableMapOf<String, Deferred<String?>>()
 
+    /** Request id that owns the fetch for a key; only its cancellation disconnects. */
+    private val holders = mutableMapOf<String, Long>()
+
     suspend fun query(pinyin: String, requestId: Long): String? {
         val backend = backendProvider()
         if (backend == CloudPinyinBackend.Off) return null
@@ -48,19 +52,40 @@ class CloudPinyinRepository(
         val deferred = mutex.withLock {
             inflight[key] ?: scope.async {
                 fetchAndStore(backend, normalized, requestId, key)
-            }.also { inflight[key] = it }
+            }.also {
+                inflight[key] = it
+                holders[key] = requestId
+            }
         }
         return try {
             deferred.await()
         } finally {
             mutex.withLock {
-                if (deferred.isCompleted) inflight.remove(key)
+                if (deferred.isCompleted && inflight[key] === deferred) {
+                    inflight.remove(key)
+                    holders.remove(key)
+                }
             }
         }
     }
 
+    /**
+     * Cancel one waiter. Only the holder of a shared fetch may tear it down; cancelling a
+     * mere waiter leaves the holder (and every other waiter) untouched.
+     */
     fun cancel(requestId: Long) {
-        disconnect(requestId)
+        scope.launch {
+            val ownedKey = mutex.withLock {
+                val key = holders.entries.firstOrNull { it.value == requestId }?.key
+                    ?: return@withLock null
+                holders.remove(key)
+                inflight.remove(key)?.cancel()
+                key
+            }
+            if (ownedKey != null) {
+                disconnect(requestId)
+            }
+        }
     }
 
     private suspend fun fetchAndStore(
