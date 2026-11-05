@@ -109,6 +109,9 @@ public:
     jmethodID ShowToast;
     jmethodID HandleFcitxEvent;
 
+    jclass PluginIpcNativeBridge;
+    jmethodID PluginIpcRequest;
+
     jclass InputMethodEntry;
     jmethodID InputMethodEntryInit;
     jmethodID InputMethodEntryInitWithSubMode;
@@ -161,6 +164,9 @@ public:
         Fcitx = reinterpret_cast<jclass>(env->NewGlobalRef(env->FindClass("org/fcitx/fcitx5/android/core/Fcitx")));
         ShowToast = env->GetStaticMethodID(Fcitx, "showToast", "(Ljava/lang/String;)V");
         HandleFcitxEvent = env->GetStaticMethodID(Fcitx, "handleFcitxEvent", "(I[Ljava/lang/Object;)V");
+
+        PluginIpcNativeBridge = reinterpret_cast<jclass>(env->NewGlobalRef(env->FindClass("org/fcitx/fcitx5/android/core/ipc/PluginIpcNativeBridge")));
+        PluginIpcRequest = env->GetStaticMethodID(PluginIpcNativeBridge, "request", "(JLjava/lang/String;[B)Z");
 
         InputMethodEntry = reinterpret_cast<jclass>(env->NewGlobalRef(env->FindClass("org/fcitx/fcitx5/android/core/InputMethodEntry")));
         InputMethodEntryInit = env->GetMethodID(InputMethodEntry, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V");

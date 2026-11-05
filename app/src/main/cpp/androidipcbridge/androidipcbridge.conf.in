@@ -1,0 +1,7 @@
+[Addon]
+Name=Android IPC Bridge
+Type=SharedLibrary
+Library=libandroidipcbridge
+Category=Module
+Version=@VERSION_NAME@
+OnDemand=True

@@ -6,9 +6,13 @@
 
 #include <sys/stat.h>
 
+#include <atomic>
+#include <cstdint>
 #include <memory>
 #include <future>
 #include <fstream>
+#include <mutex>
+#include <unordered_map>
 
 #include <android/log.h>
 
@@ -41,12 +45,23 @@
 #include "customphrase.h"
 
 #include "androidaddonloader/androidaddonloader.h"
+#include "androidipcbridge/androidipcbridge.h"
 #include "androidfrontend/androidfrontend_public.h"
 #include "jni-utils.h"
 #include "nativestreambuf.h"
 #include "helper-types.h"
 #include "object-conversion.h"
 
+
+static std::mutex ipcPendingMutex;
+static std::unordered_map<uint64_t, fcitx::AndroidIpcCallback> ipcPending;
+static std::atomic<uint64_t> ipcNextRequestId{1};
+
+// Forward declarations: these run on the fcitx thread and hand requests to Kotlin.
+static uint64_t dispatchIpcRequest(const std::string &method,
+                                   const fcitx::AndroidIpcPayload &params,
+                                   fcitx::AndroidIpcCallback callback);
+static void cancelIpcRequest(uint64_t requestId);
 
 class Fcitx {
 public:
@@ -92,6 +107,13 @@ public:
         p_quickphrase = addonMgr.addon("quickphrase");
         p_unicode = addonMgr.addon("unicode");
         p_clipboard = addonMgr.addon("clipboard", true);
+        p_ipcbridge = addonMgr.addon("androidipcbridge", true);
+        if (p_ipcbridge) {
+            p_ipcbridge->call<fcitx::IAndroidIpcBridge::setDispatcher>(
+                    dispatchIpcRequest, cancelIpcRequest);
+        } else {
+            FCITX_WARN() << "Failed to load androidipcbridge addon";
+        }
         setupCallback(p_frontend);
     }
 
@@ -481,6 +503,12 @@ public:
         p_dispatcher->schedule(nullptr);
     }
 
+    void post(std::function<void()> fn) {
+        if (p_dispatcher) {
+            p_dispatcher->schedule(std::move(fn));
+        }
+    }
+
 private:
     std::unique_ptr<fcitx::Instance> p_instance;
     std::unique_ptr<fcitx::EventDispatcher> p_dispatcher;
@@ -488,6 +516,7 @@ private:
     fcitx::AddonInstance *p_quickphrase = nullptr;
     fcitx::AddonInstance *p_unicode = nullptr;
     fcitx::AddonInstance *p_clipboard = nullptr;
+    fcitx::AddonInstance *p_ipcbridge = nullptr;
 
     void resetGlobalPointers() {
         p_instance.reset();
@@ -496,6 +525,7 @@ private:
         p_quickphrase = nullptr;
         p_unicode = nullptr;
         p_clipboard = nullptr;
+        p_ipcbridge = nullptr;
     }
 };
 
@@ -508,6 +538,63 @@ private:
 #define RETURN_VALUE_IF_NOT_RUNNING(v) DO_IF_NOT_RUNNING(return (v))
 
 GlobalRefSingleton *GlobalRef;
+
+static uint64_t dispatchIpcRequest(const std::string &method,
+                                   const fcitx::AndroidIpcPayload &params,
+                                   fcitx::AndroidIpcCallback callback) {
+    if (!Fcitx::Instance().isRunning()) {
+        callback(fcitx::AndroidIpcStatus::Unavailable, {});
+        return 0;
+    }
+    const uint64_t requestId = ipcNextRequestId.fetch_add(1);
+    {
+        std::lock_guard<std::mutex> lock(ipcPendingMutex);
+        ipcPending[requestId] = std::move(callback);
+    }
+
+    auto env = GlobalRef->AttachEnv();
+    JRef<jstring> jMethod(env, env->NewStringUTF(method.c_str()));
+    jbyteArray jParams = env->NewByteArray(static_cast<jsize>(params.size()));
+    if (!params.empty()) {
+        env->SetByteArrayRegion(jParams, 0, static_cast<jsize>(params.size()),
+                                reinterpret_cast<const jbyte *>(params.data()));
+    }
+    jboolean accepted = env->CallStaticBooleanMethod(
+            GlobalRef->PluginIpcNativeBridge, GlobalRef->PluginIpcRequest,
+            static_cast<jlong>(requestId), *jMethod, jParams);
+    env->DeleteLocalRef(jParams);
+
+    if (accepted != JNI_TRUE) {
+        fcitx::AndroidIpcCallback rejected;
+        {
+            std::lock_guard<std::mutex> lock(ipcPendingMutex);
+            auto it = ipcPending.find(requestId);
+            if (it != ipcPending.end()) {
+                rejected = std::move(it->second);
+                ipcPending.erase(it);
+            }
+        }
+        if (rejected) {
+            rejected(fcitx::AndroidIpcStatus::Unavailable, {});
+        }
+        return 0;
+    }
+    return requestId;
+}
+
+static void cancelIpcRequest(uint64_t requestId) {
+    fcitx::AndroidIpcCallback cancelled;
+    {
+        std::lock_guard<std::mutex> lock(ipcPendingMutex);
+        auto it = ipcPending.find(requestId);
+        if (it == ipcPending.end()) {
+            return;
+        }
+        cancelled = std::move(it->second);
+        ipcPending.erase(it);
+    }
+    cancelled(fcitx::AndroidIpcStatus::Cancelled, {});
+}
 
 static jobjectArray stringArrayToJObjectArray(JNIEnv *env, const std::vector<std::string> &values) {
     jobjectArray array = env->NewObjectArray(
@@ -1169,6 +1256,41 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_scheduleEmpty(JNIEnv *env, jclass clazz) {
     Fcitx::Instance().scheduleEmpty();
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_fcitx_fcitx5_android_core_ipc_PluginIpcNativeBridge_nativeIpcResponse(
+        JNIEnv *env, jclass clazz, jlong requestId, jint status, jbyteArray data) {
+    fcitx::AndroidIpcPayload payload;
+    if (data) {
+        const jsize length = env->GetArrayLength(data);
+        payload.resize(static_cast<size_t>(length));
+        if (length > 0) {
+            env->GetByteArrayRegion(data, 0, length,
+                                    reinterpret_cast<jbyte *>(payload.data()));
+        }
+    }
+
+    fcitx::AndroidIpcCallback callback;
+    {
+        std::lock_guard<std::mutex> lock(ipcPendingMutex);
+        auto it = ipcPending.find(static_cast<uint64_t>(requestId));
+        if (it == ipcPending.end()) {
+            // reply arrived after timeout, cancellation, or disconnect
+            return;
+        }
+        callback = std::move(it->second);
+        ipcPending.erase(it);
+    }
+    if (!Fcitx::Instance().isRunning()) {
+        return;
+    }
+    const auto ipcStatus = static_cast<fcitx::AndroidIpcStatus>(status);
+    Fcitx::Instance().post([callback = std::move(callback), ipcStatus,
+                                   payload = std::move(payload)]() {
+        callback(ipcStatus, payload);
+    });
 }
 
 extern "C"
