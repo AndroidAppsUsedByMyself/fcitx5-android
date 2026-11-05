@@ -175,7 +175,10 @@ class PluginFragment : PaddingPreferenceFragment() {
                         val state = PluginStateResolver.resolve(
                             descriptor,
                             addonRuntime,
-                            FcitxPluginServices.isBound(descriptor.packageName)
+                            PluginStateResolver.serviceStateOf(
+                                descriptor,
+                                FcitxPluginServices.connectionState(descriptor.packageName)
+                            )
                         )
                         val enabled = descriptor.packageName in enabledPlugins
                         addPreference(SwitchPreferenceCompat(context).apply {
@@ -284,6 +287,16 @@ class PluginFragment : PaddingPreferenceFragment() {
                 lines += service.protocolVersion?.let {
                     getString(R.string.plugin_service_not_bound, it)
                 } ?: getString(R.string.plugin_service_not_bound_unknown)
+            }
+
+            is PluginServiceState.Incompatible -> {
+                lines += service.protocolVersion?.let {
+                    getString(R.string.plugin_service_incompatible, it)
+                } ?: getString(R.string.plugin_service_incompatible_unknown)
+            }
+
+            is PluginServiceState.Rejected -> {
+                lines += getString(R.string.plugin_service_rejected, service.pluginId)
             }
         }
         return lines.joinToString("\n")

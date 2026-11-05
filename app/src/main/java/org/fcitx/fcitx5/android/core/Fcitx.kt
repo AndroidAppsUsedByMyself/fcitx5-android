@@ -550,9 +550,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         registerFcitxEventHandler(::handleFcitxEvent)
         lifecycleRegistry.postEvent(FcitxLifecycle.Event.ON_START)
         ClipboardManager.addOnUpdateListener(onClipboardUpdate)
-        DataManager.addOnNextSyncedCallback {
-            FcitxPluginServices.connectAll()
-        }
         setupLogStream(AppPrefs.getInstance().internal.verboseLog.getValue())
         dispatcher.start()
     }

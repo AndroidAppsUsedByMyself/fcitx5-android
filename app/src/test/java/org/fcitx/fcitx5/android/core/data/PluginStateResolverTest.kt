@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.core.data
 
 import org.fcitx.fcitx5.android.common.plugin.PluginProvides
 import org.fcitx.fcitx5.android.common.plugin.PluginService
+import org.fcitx.fcitx5.android.core.ipc.PluginIpcConnectionState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -34,11 +35,11 @@ class PluginStateResolverTest {
         descriptor: PluginDescriptor,
         loaded: Set<String> = emptySet(),
         onDemand: Set<String> = emptySet(),
-        serviceBound: Boolean = false
+        service: PluginServiceState = PluginServiceState.NotDeclared
     ) = PluginStateResolver.resolve(
         descriptor,
         AddonRuntimeSnapshot(loaded, onDemand),
-        serviceBound
+        service
     )
 
     @Test
@@ -63,21 +64,61 @@ class PluginStateResolverTest {
     fun testServiceDeclaredButNotBound() {
         val state = resolve(
             descriptor(service = PluginService(".MainService", "action", 7)),
-            serviceBound = false
+            service = PluginServiceState.NotBound(7)
         )
         assertEquals(PluginServiceState.NotBound(7), state.service)
     }
 
     @Test
     fun testLegacyServiceHasUnknownProtocol() {
-        val state = resolve(descriptor(hasService = true), serviceBound = false)
+        val state = resolve(
+            descriptor(hasService = true),
+            service = PluginServiceState.NotBound(null)
+        )
         assertEquals(PluginServiceState.NotBound(null), state.service)
     }
 
     @Test
     fun testServiceNotDeclared() {
-        val state = resolve(descriptor(), serviceBound = true)
-        assertEquals(PluginServiceState.NotDeclared, state.service)
+        val state = resolve(descriptor(), service = PluginServiceState.Bound(1))
+        assertEquals(PluginServiceState.Bound(1), state.service)
+    }
+
+    @Test
+    fun testConnectionStateMapping() {
+        val declared = descriptor(service = PluginService(".MainService", "action", 1))
+        assertEquals(
+            PluginServiceState.Bound(1),
+            PluginStateResolver.serviceStateOf(
+                declared,
+                PluginIpcConnectionState.Connected(1)
+            )
+        )
+        assertEquals(
+            PluginServiceState.Incompatible(9),
+            PluginStateResolver.serviceStateOf(
+                declared,
+                PluginIpcConnectionState.Incompatible(9)
+            )
+        )
+        assertEquals(
+            PluginServiceState.Rejected("org.other"),
+            PluginStateResolver.serviceStateOf(
+                declared,
+                PluginIpcConnectionState.Rejected("org.other")
+            )
+        )
+        assertEquals(
+            PluginServiceState.NotBound(1),
+            PluginStateResolver.serviceStateOf(declared, PluginIpcConnectionState.Idle)
+        )
+        assertEquals(
+            PluginServiceState.NotDeclared,
+            PluginStateResolver.serviceStateOf(
+                descriptor(),
+                PluginIpcConnectionState.Connected(1)
+            )
+        )
     }
 
     @Test
