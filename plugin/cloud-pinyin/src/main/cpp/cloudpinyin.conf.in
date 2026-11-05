@@ -4,7 +4,7 @@ Category=Module
 Version=@VERSION_NAME@
 Library=libcloudpinyin
 Type=SharedLibrary
-OnDemand=True
+OnDemand=False
 
 [Addon/Dependencies]
 0=core
