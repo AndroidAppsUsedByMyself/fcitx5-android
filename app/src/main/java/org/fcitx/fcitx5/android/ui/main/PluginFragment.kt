@@ -10,9 +10,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.lifecycle.lifecycleScope
@@ -23,6 +21,7 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.core.data.FileSource
 import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
+import org.fcitx.fcitx5.android.core.data.PluginManifestActions
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.utils.addCategory
@@ -130,7 +129,7 @@ class PluginFragment : PaddingPreferenceFragment() {
                 addCategory(R.string.plugins_loaded) {
                     isIconSpaceReserved = false
                     loaded.forEach {
-                        addPreference(it.name, "${it.versionName}\n${it.description}") {
+                        addPreference(it.packageName, "${it.versionName}\n${it.description}") {
                             startPluginAboutActivity(it.packageName)
                         }
                     }
@@ -153,7 +152,7 @@ class PluginFragment : PaddingPreferenceFragment() {
                             is PluginLoadFailed.PathConflict -> {
                                 val owner = when (reason.existingSrc) {
                                     FileSource.Main -> getString(R.string.main_program)
-                                    is FileSource.Plugin -> reason.existingSrc.descriptor.name
+                                    is FileSource.Plugin -> reason.existingSrc.descriptor.packageName
                                 }
                                 getString(R.string.path_conflict, reason.path, owner)
                             }
@@ -174,17 +173,12 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private fun startPluginAboutActivity(pkg: String): Boolean {
         val ctx = requireContext()
-        val pm = ctx.packageManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.queryIntentActivities(
-                Intent(DataManager.PLUGIN_INTENT),
-                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
-            )
-        } else {
-            pm.queryIntentActivities(Intent(DataManager.PLUGIN_INTENT), PackageManager.MATCH_ALL)
-        }.firstOrNull {
-            it.activityInfo.packageName == pkg
-        }?.also {
+        val activity = PluginManifestActions.all.asSequence()
+            .flatMap { DataManager.queryPluginActivities(it).asSequence() }
+            .firstOrNull {
+                it.activityInfo.packageName == pkg
+            }
+        activity?.also {
             ctx.startActivity(Intent().apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 component = ComponentName(it.activityInfo.packageName, it.activityInfo.name)

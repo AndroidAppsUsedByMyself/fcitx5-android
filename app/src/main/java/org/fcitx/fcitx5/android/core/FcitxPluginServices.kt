@@ -57,8 +57,8 @@ object FcitxPluginServices {
     private val connections = mutableMapOf<String, PluginServiceConnection>()
 
     private fun connectPlugin(descriptor: PluginDescriptor) {
-        val connection = PluginServiceConnection(descriptor.name) {
-            disconnectPlugin(descriptor.name)
+        val connection = PluginServiceConnection(descriptor.packageName) {
+            disconnectPlugin(descriptor.packageName)
         }
         try {
             val result = appContext.bindService(
@@ -67,27 +67,27 @@ object FcitxPluginServices {
                 Context.BIND_AUTO_CREATE
             )
             if (!result) throw Exception("Couldn't find service or not enough permission")
-            connections[descriptor.name] = connection
-            Timber.d("Bind to plugin: ${descriptor.name}")
+            connections[descriptor.packageName] = connection
+            Timber.d("Bind to plugin: ${descriptor.packageName}")
         } catch (e: Exception) {
             appContext.unbindService(connection)
-            Timber.w("Cannot bind to plugin: ${descriptor.name}")
+            Timber.w("Cannot bind to plugin: ${descriptor.packageName}")
             Timber.w(e)
         }
     }
 
     fun connectAll() {
         DataManager.getLoadedPlugins().forEach {
-            if (it.hasService && !connections.containsKey(it.name)) {
+            if (it.hasService && !connections.containsKey(it.packageName)) {
                 connectPlugin(it)
             }
         }
     }
 
-    private fun disconnectPlugin(name: String) {
-        connections.remove(name)?.also {
+    private fun disconnectPlugin(packageName: String) {
+        connections.remove(packageName)?.also {
             appContext.unbindService(it)
-            Timber.d("Unbound plugin: $name")
+            Timber.d("Unbound plugin: $packageName")
         }
     }
 

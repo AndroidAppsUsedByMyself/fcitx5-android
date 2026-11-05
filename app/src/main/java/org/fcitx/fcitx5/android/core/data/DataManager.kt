@@ -6,7 +6,9 @@ package org.fcitx.fcitx5.android.core.data
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.content.res.AssetManager
 import android.os.Build
 import kotlinx.serialization.encodeToString
@@ -19,6 +21,7 @@ import org.fcitx.fcitx5.android.utils.isJavaIdentifier
 import org.xmlpull.v1.XmlPullParser
 import timber.log.Timber
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -33,8 +36,6 @@ object DataManager {
         val loaded: Set<PluginDescriptor>,
         val failed: Map<String, PluginLoadFailed>
     )
-
-    const val PLUGIN_INTENT = "${BuildConfig.APPLICATION_ID}.plugin.MANIFEST"
 
     private val lock = ReentrantLock()
 
@@ -84,27 +85,25 @@ object DataManager {
     fun addOnNextSyncedCallback(block: () -> Unit) =
         callbacks.add(block)
 
-    fun detectPlugins(): PluginSet {
+    fun detectPlugins(signaturePolicy: PluginSignaturePolicy = PluginTrust.policy()): PluginSet {
         val toLoad = mutableSetOf<PluginDescriptor>()
         val preloadFailed = mutableMapOf<String, PluginLoadFailed>()
 
         val pm = appContext.packageManager
 
-        val pluginPackages = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.queryIntentActivities(
-                Intent(PLUGIN_INTENT),
-                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
-            )
-        } else {
-            pm.queryIntentActivities(Intent(PLUGIN_INTENT), PackageManager.MATCH_ALL)
-        }.map {
-            it.activityInfo.packageName
+        val hits = mutableMapOf<String, MutableSet<String>>()
+        for (action in PluginManifestActions.all) {
+            queryPluginActivities(action).forEach {
+                hits.getOrPut(it.activityInfo.packageName) { mutableSetOf() }.add(action)
+            }
         }
+        val matches = resolvePluginMatches(hits)
 
-        Timber.d("Detected plugin packages: ${pluginPackages.joinToString()}")
+        Timber.d("Detected plugin packages: ${matches.joinToString { it.packageName }}")
 
         // Parse plugin.xml
-        for (packageName in pluginPackages) {
+        for (match in matches) {
+            val packageName = match.packageName
             val res = pm.getResourcesForApplication(packageName)
 
             @SuppressLint("DiscouragedApi")
@@ -147,23 +146,19 @@ object DataManager {
 
             if (apiVersion != null && description != null) {
                 if (PluginDescriptor.pluginAPI == apiVersion) {
-                    val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        pm.getPackageInfo(
-                            packageName,
-                            PackageManager.PackageInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-                        )
-                    } else {
-                        pm.getPackageInfo(packageName, PackageManager.GET_META_DATA)
-                    }
+                    val info = getPluginPackageInfo(pm, packageName)
+                    val origin = signaturePolicy.originOf(signerFingerprints(info))
                     toLoad.add(
                         PluginDescriptor(
-                            packageName,
-                            apiVersion,
-                            domain,
-                            description,
-                            hasService,
-                            info.versionName ?: "",
-                            info.applicationInfo?.nativeLibraryDir ?: ""
+                            packageName = packageName,
+                            matchedAction = match.matchedAction,
+                            origin = origin,
+                            apiVersion = apiVersion,
+                            domain = domain,
+                            description = description,
+                            hasService = hasService,
+                            versionName = info.versionName ?: "",
+                            nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: ""
                         )
                     )
                 } else {
@@ -176,6 +171,50 @@ object DataManager {
             }
         }
         return PluginSet(toLoad, preloadFailed)
+    }
+
+    fun queryPluginActivities(action: String): List<ResolveInfo> {
+        val pm = appContext.packageManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentActivities(
+                Intent(action),
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
+            )
+        } else {
+            pm.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getPluginPackageInfo(pm: PackageManager, packageName: String): PackageInfo {
+        val signerFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            PackageManager.GET_SIGNATURES
+        }
+        val flags = PackageManager.GET_META_DATA or signerFlag
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(flags.toLong()))
+        } else {
+            pm.getPackageInfo(packageName, flags)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun signerFingerprints(info: PackageInfo): Set<String> {
+        val signers = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            info.signingInfo?.apkContentsSigners
+        } else {
+            info.signatures
+        }
+        return signers.orEmpty().map { it.toByteArray().sha256Hex() }.toSet()
+    }
+
+    private fun ByteArray.sha256Hex(): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(this)
+        return buildString(digest.size * 2) {
+            digest.forEach { append((it.toInt() and 0xFF).toString(16).padStart(2, '0')) }
+        }
     }
 
     fun sync() = lock.withLock {
@@ -210,7 +249,7 @@ object DataManager {
             val pluginContext = appContext.createPackageContext(plugin.packageName, 0)
             val assets = pluginContext.assets
             val descriptor = runCatching { assets.getDataDescriptor() }.onFailure {
-                Timber.w("Failed to get or decode data descriptor of '${plugin.name}'")
+                Timber.w("Failed to get or decode data descriptor of '${plugin.packageName}'")
                 Timber.w(it)
             }.getOrNull() ?: continue
             try {
@@ -226,9 +265,9 @@ object DataManager {
                     PluginLoadFailed.PathConflict(plugin, e.path, e.src)
                 continue
             }
-            pluginAssets[plugin.name] = assets
+            pluginAssets[plugin.packageName] = assets
             loadedPlugins.add(plugin)
-            Timber.d("Merged data hierarchy of ${plugin.name}")
+            Timber.d("Merged data hierarchy of ${plugin.packageName}")
         }
 
         Timber.d("Hierarchy created")
@@ -240,7 +279,7 @@ object DataManager {
             when (it) {
                 is FileAction.CreateFile -> {
                     val assets = if (it.src is FileSource.Plugin)
-                        pluginAssets.getValue(it.src.descriptor.name)
+                        pluginAssets.getValue(it.src.descriptor.packageName)
                     else appContext.assets
                     assets.copyFile(it.path)
                 }
@@ -252,7 +291,7 @@ object DataManager {
                 }
                 is FileAction.UpdateFile -> {
                     val assets = if (it.src is FileSource.Plugin)
-                        pluginAssets.getValue(it.src.descriptor.name)
+                        pluginAssets.getValue(it.src.descriptor.packageName)
                     else appContext.assets
                     assets.copyFile(it.path)
                 }

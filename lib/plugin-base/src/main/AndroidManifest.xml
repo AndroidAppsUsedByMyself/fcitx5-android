@@ -26,7 +26,8 @@
             android:exported="true"
             android:theme="@style/DeviceSettingsTheme">
             <intent-filter>
-                <action android:name="org.fcitx.fcitx5.android.plugin.MANIFEST" />
+                <!-- Must match the manifest action queried by the host variant -->
+                <action android:name="${mainApplicationId}.plugin.MANIFEST" />
             </intent-filter>
         </activity>
     </application>

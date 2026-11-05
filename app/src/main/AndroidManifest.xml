@@ -18,8 +18,18 @@
     <queries tools:node="removeAll" />
 
     <queries>
+        <!-- Plugin discovery: official and downstream builds, release and debug variants -->
+        <intent>
+            <action android:name="org.fcitx.fcitx5.android.plugin.MANIFEST" />
+        </intent>
+        <intent>
+            <action android:name="org.fcitx.fcitx5.android.debug.plugin.MANIFEST" />
+        </intent>
         <intent>
             <action android:name="${applicationId}.plugin.MANIFEST" />
+        </intent>
+        <intent>
+            <action android:name="${applicationId}.debug.plugin.MANIFEST" />
         </intent>
         <intent>
             <action android:name="android.view.InputMethod" />
