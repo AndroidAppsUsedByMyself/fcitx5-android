@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.core.data
 
 import android.util.Base64
+import org.fcitx.fcitx5.android.common.util.PathSafety
 import java.security.MessageDigest
 
 /**
@@ -19,6 +20,7 @@ class DataHierarchy {
 
     data class PathConflict(val path: String, val src: FileSource) : Exception()
     data class SymlinkConflict(val path: String, val src: FileSource) : Exception()
+    data class PathEscape(val path: String, val src: FileSource) : Exception()
 
     /**
      * Merge a [DataDescriptor]
@@ -27,6 +29,13 @@ class DataHierarchy {
      * @throws SymlinkConflict if a file or directory already exists when creating symlink
      */
     fun install(descriptor: DataDescriptor, src: FileSource) {
+        if (src is FileSource.Plugin) {
+            descriptor.files.keys.forEach { requireContained(it, src) }
+            descriptor.symlinks.forEach { (target, source) ->
+                requireContained(target, src)
+                requireContained(source, src)
+            }
+        }
         val newFiles = descriptor.files.mapValues { (path, sha256) ->
             files[path]?.also { old ->
                 // path conflict when at least one of them is not a directory (empty sha256)
@@ -53,6 +62,10 @@ class DataHierarchy {
         }
         symlinks.putAll(newSymlinks)
         descriptorSHA256.add(descriptor.sha256)
+    }
+
+    private fun requireContained(path: String, src: FileSource.Plugin) {
+        if (PathSafety.normalizeRelative(path) == null) throw PathEscape(path, src)
     }
 
     /**

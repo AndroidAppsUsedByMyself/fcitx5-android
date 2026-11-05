@@ -1,12 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
-    <xs:complexType name="pluginType">
-        <xs:sequence>
-            <xs:element name="apiVersion" type="xs:string" />
-            <xs:element name="domain" type="xs:string" />
-            <xs:element name="description" type="xs:string" />
-            <xs:element name="hasService" type="xs:boolean" />
-        </xs:sequence>
-    </xs:complexType>
-    <xs:element name="plugin" type="pluginType" />
+    <!--
+        Only apiVersion is required. Existing plugins may omit capabilities and
+        service; new plugins declare them explicitly.
+    -->
+    <xs:element name="plugin">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="apiVersion" type="xs:string" />
+                <xs:element name="domain" type="xs:string" minOccurs="0" />
+                <xs:element name="description" type="xs:string" minOccurs="0" />
+                <!-- Legacy boolean hint, superseded by <service>. -->
+                <xs:element name="hasService" type="xs:boolean" minOccurs="0" />
+                <xs:element name="provides" minOccurs="0">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="addon" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
+                            <xs:element name="library" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
+                            <xs:element name="dataRoot" type="xs:string" minOccurs="0" maxOccurs="unbounded" />
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+                <xs:element name="service" minOccurs="0">
+                    <xs:complexType>
+                        <xs:sequence>
+                            <xs:element name="component" type="xs:string" />
+                            <xs:element name="action" type="xs:string" />
+                            <xs:element name="protocolVersion" type="xs:nonNegativeInteger" />
+                        </xs:sequence>
+                    </xs:complexType>
+                </xs:element>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
 </xs:schema>

@@ -4,7 +4,7 @@
  */
 package org.fcitx.fcitx5.android.core.data
 
-import android.annotation.SuppressLint
+import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -14,13 +14,16 @@ import android.os.Build
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.fcitx.fcitx5.android.BuildConfig
+import org.fcitx.fcitx5.android.common.plugin.PluginManifestParser
+import org.fcitx.fcitx5.android.common.plugin.PluginManifestResult
+import org.fcitx.fcitx5.android.common.plugin.PluginService
+import org.fcitx.fcitx5.android.common.util.PathSafety
 import org.fcitx.fcitx5.android.core.data.DataManager.dataDir
 import org.fcitx.fcitx5.android.utils.FileUtil
 import org.fcitx.fcitx5.android.utils.appContext
-import org.fcitx.fcitx5.android.utils.isJavaIdentifier
-import org.xmlpull.v1.XmlPullParser
 import timber.log.Timber
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -101,73 +104,55 @@ object DataManager {
 
         Timber.d("Detected plugin packages: ${matches.joinToString { it.packageName }}")
 
-        // Parse plugin.xml
+        // Parse and validate plugin.xml
         for (match in matches) {
             val packageName = match.packageName
             val res = pm.getResourcesForApplication(packageName)
-
-            @SuppressLint("DiscouragedApi")
-            val resId = res.getIdentifier("plugin", "xml", packageName)
-            if (resId == 0) {
-                Timber.w("Failed to get the plugin descriptor of $packageName")
-                failedPlugins[packageName] = PluginLoadFailed.MissingPluginDescriptor
-                continue
-            }
-            val parser = res.getXml(resId)
-            var eventType = parser.eventType
-            var domain: String? = null
-            var apiVersion: String? = null
-            var description: String? = null
-            var hasService = false
-            var text: String? = null
-            while ((eventType != XmlPullParser.END_DOCUMENT)) {
-                when (eventType) {
-                    XmlPullParser.TEXT -> text = parser.text
-                    XmlPullParser.END_TAG -> when (parser.name) {
-                        "apiVersion" -> apiVersion = text
-                        "domain" -> domain = text
-                        "description" -> description = text
-                        "hasService" -> hasService = text?.lowercase() == "true"
+            val result = PluginManifestParser.parse(res, packageName)
+            if (result !is PluginManifestResult.Parsed) {
+                when (result) {
+                    PluginManifestResult.Missing -> {
+                        Timber.w("Plugin descriptor is missing for $packageName")
+                        preloadFailed[packageName] = PluginLoadFailed.MissingPluginDescriptor
+                    }
+                    is PluginManifestResult.Invalid -> {
+                        Timber.w("Invalid plugin descriptor for $packageName: ${result.rejection.technicalMessage}")
+                        preloadFailed[packageName] = PluginLoadFailed.PluginDescriptorParseError
                     }
                 }
-                eventType = parser.next()
+                continue
             }
-            parser.close()
+            val manifest = result.manifest
+            val apiVersion = manifest.apiVersion
 
-            if (description?.startsWith("@string/") == true) {
-                // Replace "@string/" with string resource
-                val s = description.substring(8)
-                if (s.isJavaIdentifier()) {
-                    @SuppressLint("DiscouragedApi")
-                    val id = res.getIdentifier(s, "string", packageName)
-                    if (id != 0) description = res.getString(id)
+            if (PluginDescriptor.pluginAPI == apiVersion) {
+                val service = manifest.service
+                if (service != null && !isServiceAvailable(pm, packageName, service)) {
+                    Timber.w("Declared service '${service.component}' with action '${service.action}' is unavailable in $packageName")
+                    preloadFailed[packageName] =
+                        PluginLoadFailed.ServiceUnavailable(packageName, service.component, service.action)
+                    continue
                 }
-            }
-
-            if (apiVersion != null && description != null) {
-                if (PluginDescriptor.pluginAPI == apiVersion) {
-                    val info = getPluginPackageInfo(pm, packageName)
-                    val origin = signaturePolicy.originOf(signerFingerprints(info))
-                    toLoad.add(
-                        PluginDescriptor(
-                            packageName = packageName,
-                            matchedAction = match.matchedAction,
-                            origin = origin,
-                            apiVersion = apiVersion,
-                            domain = domain,
-                            description = description,
-                            hasService = hasService,
-                            versionName = info.versionName ?: "",
-                            nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: ""
-                        )
+                val info = getPluginPackageInfo(pm, packageName)
+                val origin = signaturePolicy.originOf(signerFingerprints(info))
+                toLoad.add(
+                    PluginDescriptor(
+                        packageName = packageName,
+                        matchedAction = match.matchedAction,
+                        origin = origin,
+                        apiVersion = apiVersion,
+                        domain = manifest.domain,
+                        description = manifest.description ?: "",
+                        provides = manifest.provides,
+                        service = service,
+                        hasService = manifest.hasService || service != null,
+                        versionName = info.versionName ?: "",
+                        nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: ""
                     )
-                } else {
-                    Timber.w("$packageName's api version [$apiVersion] doesn't match with the current [${PluginDescriptor.pluginAPI}]")
-                    preloadFailed[packageName] = PluginLoadFailed.PluginAPIIncompatible(apiVersion)
-                }
+                )
             } else {
-                Timber.w("Failed to parse plugin descriptor of $packageName")
-                preloadFailed[packageName] = PluginLoadFailed.PluginDescriptorParseError
+                Timber.w("$packageName's api version [$apiVersion] doesn't match with the current [${PluginDescriptor.pluginAPI}]")
+                preloadFailed[packageName] = PluginLoadFailed.PluginAPIIncompatible(apiVersion)
             }
         }
         return PluginSet(toLoad, preloadFailed)
@@ -183,6 +168,38 @@ object DataManager {
         } else {
             pm.queryIntentActivities(Intent(action), PackageManager.MATCH_ALL)
         }
+    }
+
+    private fun isServiceAvailable(
+        pm: PackageManager,
+        packageName: String,
+        service: PluginService
+    ): Boolean {
+        val component = ComponentName(
+            packageName,
+            if (service.component.startsWith(".")) "$packageName${service.component}"
+            else service.component
+        )
+        val componentExists = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getServiceInfo(component, PackageManager.ComponentInfoFlags.of(0L))
+            } else {
+                pm.getServiceInfo(component, 0)
+            }
+        }.isSuccess
+        val services = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.queryIntentServices(
+                Intent(service.action).setPackage(packageName),
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
+            )
+        } else {
+            pm.queryIntentServices(
+                Intent(service.action).setPackage(packageName),
+                PackageManager.MATCH_ALL
+            )
+        }
+        val actionExists = services.any { it.serviceInfo.name == component.className }
+        return verifyServiceDeclaration(componentExists, actionExists)
     }
 
     @Suppress("DEPRECATION")
@@ -264,6 +281,11 @@ object DataManager {
                 failedPlugins[plugin.packageName] =
                     PluginLoadFailed.PathConflict(plugin, e.path, e.src)
                 continue
+            } catch (e: DataHierarchy.PathEscape) {
+                Timber.w("Asset path '${e.path}' escapes the plugin root")
+                failedPlugins[plugin.packageName] =
+                    PluginLoadFailed.AssetPathViolation(plugin, e.path)
+                continue
             }
             pluginAssets[plugin.packageName] = assets
             loadedPlugins.add(plugin)
@@ -325,11 +347,17 @@ object DataManager {
         FileUtil.removeFile(dataDir.resolve(path))
 
     private fun symlink(source: String, target: String) =
-        FileUtil.symlink(dataDir.resolve(source), dataDir.resolve(target))
+        FileUtil.symlink(dataDir.resolve(source), dataDir.resolve(target), dataDir)
 
     private fun AssetManager.copyFile(filename: String) {
-        open(filename).use { i ->
-            File(dataDir, filename)
+        val path = PathSafety.normalizeRelative(filename)
+            ?: throw IOException("Unsafe asset path: '$filename'")
+        val target = File(dataDir, path)
+        if (!PathSafety.isWithin(dataDir, target)) {
+            throw IOException("Asset path escapes data directory: '$filename'")
+        }
+        open(path).use { i ->
+            target
                 .also { it.parentFile?.mkdirs() }
                 .outputStream()
                 .use { o -> i.copyTo(o) }
@@ -346,3 +374,9 @@ object DataManager {
     }
 
 }
+
+/**
+ * A declared service is usable only when both its component and action resolve in the APK.
+ */
+internal fun verifyServiceDeclaration(componentExists: Boolean, actionExists: Boolean): Boolean =
+    componentExists && actionExists

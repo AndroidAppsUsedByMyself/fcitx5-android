@@ -162,6 +162,12 @@ class PluginFragment : PaddingPreferenceFragment() {
                             PluginLoadFailed.PluginDescriptorParseError -> {
                                 getString(R.string.invalid_plugin_descriptor)
                             }
+                            is PluginLoadFailed.ServiceUnavailable -> {
+                                getString(R.string.plugin_service_unavailable, reason.component)
+                            }
+                            is PluginLoadFailed.AssetPathViolation -> {
+                                getString(R.string.plugin_asset_path_violation, reason.path)
+                            }
                         }
                         addPreference(packageName, summary) {
                             startPluginAboutActivity(packageName)

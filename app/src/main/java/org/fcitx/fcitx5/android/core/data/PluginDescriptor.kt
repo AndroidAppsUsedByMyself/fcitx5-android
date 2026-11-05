@@ -5,6 +5,8 @@
 package org.fcitx.fcitx5.android.core.data
 
 import org.fcitx.fcitx5.android.BuildConfig
+import org.fcitx.fcitx5.android.common.plugin.PluginProvides
+import org.fcitx.fcitx5.android.common.plugin.PluginService
 
 /**
  * Where a plugin APK comes from.
@@ -121,7 +123,15 @@ data class PluginDescriptor(
      */
     val description: String,
     /**
-     * Contains IPC service with action `${mainApplicationId}.plugin.SERVICE`. Default to `false`.
+     * Declared addons, native libraries, and data roots, if any.
+     */
+    val provides: PluginProvides?,
+    /**
+     * Declared IPC service, if any.
+     */
+    val service: PluginService?,
+    /**
+     * Whether the plugin exposes an IPC service, including the legacy `hasService` hint.
      */
     val hasService: Boolean,
     val versionName: String,

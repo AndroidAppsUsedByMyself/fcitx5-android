@@ -31,7 +31,8 @@ import android.widget.ListView
 import android.widget.Toast
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.License
-import org.xmlpull.v1.XmlPullParser
+import org.fcitx.fcitx5.android.common.plugin.PluginManifestParser
+import org.fcitx.fcitx5.android.common.plugin.PluginManifestResult
 import kotlin.math.max
 
 class AboutActivity : PreferenceActivity() {
@@ -112,41 +113,19 @@ class AboutActivity : PreferenceActivity() {
             super.onCreate(savedInstanceState)
             val screen = preferenceManager.createPreferenceScreen(context)
             val pkg = context.packageName
-            val pluginXmlRes = resources.getIdentifier("plugin", "xml", pkg)
-            if (pluginXmlRes == 0) return
-            val parser = resources.getXml(pluginXmlRes)
-            var eventType = parser.eventType
-            var gettextDomain = ""
-            var apiVersion = ""
-            var description = ""
-            var text = ""
-            var hasService = false
-            while ((eventType != XmlPullParser.END_DOCUMENT)) {
-                when (eventType) {
-                    XmlPullParser.TEXT -> text = parser.text
-                    XmlPullParser.END_TAG -> when (parser.name) {
-                        "apiVersion" -> apiVersion = text
-                        "domain" -> gettextDomain = text
-                        "description" -> description = text.let {
-                            if (it.startsWith("@string/")) {
-                                val resName = it.removePrefix("@string/")
-                                val resId = resources.getIdentifier(resName, "string", pkg)
-                                if (resId != 0) getString(resId) else it
-                            } else it
-                        }
-                        "hasService" -> hasService = text.lowercase() == "true"
-                    }
-                }
-                eventType = parser.next()
+            val manifest = when (val result = PluginManifestParser.parse(resources, pkg)) {
+                is PluginManifestResult.Parsed -> result.manifest
+                else -> return
             }
             screen.addCategory(R.string.plugin_info) {
                 addPreference(R.string.pkg_name, pkg)
-                addPreference(R.string.api_version, apiVersion)
-                if (gettextDomain.isNotBlank()) {
-                    addPreference(R.string.gettext_domain, gettextDomain)
-                }
-                addPreference(R.string.plugin_description, description)
-                addPreference(R.string.has_service, hasService.toString())
+                addPreference(R.string.api_version, manifest.apiVersion)
+                manifest.domain?.let { addPreference(R.string.gettext_domain, it) }
+                addPreference(R.string.plugin_description, manifest.description ?: "")
+                addPreference(
+                    R.string.has_service,
+                    (manifest.service != null || manifest.hasService).toString()
+                )
             }
             resources.getIdentifier("aboutlibraries", "raw", pkg).also { resId ->
                 if (resId == 0) return@also

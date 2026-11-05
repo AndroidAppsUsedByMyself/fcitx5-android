@@ -4,9 +4,13 @@
  */
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import org.gradle.api.GradleException
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.configure
+import javax.xml.XMLConstants
+import javax.xml.transform.stream.StreamSource
+import javax.xml.validation.SchemaFactory
 
 /**
  * Register `assemble${Variant}Plugins` task for root project,
@@ -38,6 +42,34 @@ class AndroidPluginAppConventionPlugin : Plugin<Project> {
                 }
             }
         }
+        val verifyPluginManifests = target.tasks.register("verifyPluginManifests") {
+            group = "verification"
+            description = "Validate res/xml/plugin.xml against plugin/pluginSchema.xsd"
+            val manifestFile = target.layout.projectDirectory.file("src/main/res/xml/plugin.xml")
+            val schemaFile = target.rootProject.layout.projectDirectory.file("plugin/pluginSchema.xsd")
+            inputs.files(manifestFile, schemaFile)
+            doLast {
+                if (!manifestFile.asFile.isFile) {
+                    throw GradleException("Missing plugin manifest: ${manifestFile.asFile}")
+                }
+                val error = runCatching {
+                    SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI)
+                        .newSchema(schemaFile.asFile)
+                        .newValidator()
+                        .validate(StreamSource(manifestFile.asFile))
+                }.exceptionOrNull()
+                if (error != null) {
+                    throw GradleException(
+                        "Invalid plugin manifest ${manifestFile.asFile}: ${error.message}",
+                        error
+                    )
+                }
+            }
+        }
+        target.tasks.configureEach {
+            if (name == "preBuild") dependsOn(verifyPluginManifests)
+        }
+
         target.extensions.configure<ApplicationAndroidComponentsExtension> {
             onVariants { variant ->
                 val variantName = variant.name.capitalized()

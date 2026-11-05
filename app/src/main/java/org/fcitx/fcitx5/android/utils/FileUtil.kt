@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.utils
 
 import android.system.Os
 import android.system.OsConstants
+import org.fcitx.fcitx5.android.common.util.PathSafety
 import java.io.File
 import java.io.IOException
 
@@ -44,7 +45,10 @@ object FileUtil {
             throw IOException("Cannot delete '${file.path}'")
     }
 
-    fun symlink(source: File, target: File) = runCatching {
+    fun symlink(source: File, target: File, root: File) = runCatching {
+        if (!PathSafety.isWithin(root, source) || !PathSafety.isWithin(root, target)) {
+            throw IOException("Symlink escapes data root: '$source' -> '$target'")
+        }
         target.parentFile?.mkdirs()
         Os.symlink(source.path, target.path)
     }

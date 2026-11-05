@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<plugin xmlns="../../../../../pluginSchema.xsd">
+<plugin>
     <apiVersion>0.1</apiVersion>
     <domain>fcitx5-hangul</domain>
     <description>@string/description</description>

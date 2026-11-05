@@ -26,4 +26,15 @@ sealed interface PluginLoadFailed {
     data class PluginAPIIncompatible(
         val api: String
     ) : PluginLoadFailed
+
+    data class ServiceUnavailable(
+        val packageName: String,
+        val component: String,
+        val action: String
+    ) : PluginLoadFailed
+
+    data class AssetPathViolation(
+        val plugin: PluginDescriptor,
+        val path: String
+    ) : PluginLoadFailed
 }
