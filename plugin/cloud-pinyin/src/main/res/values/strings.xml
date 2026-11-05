@@ -3,4 +3,10 @@
     <string name="app_name_release">Fcitx5 Cloud Pinyin</string>
     <string name="app_name_debug">Fcitx5 Cloud Pinyin (Debug)</string>
     <string name="description">Cloud pinyin candidate source</string>
+    <string name="settings_title">Cloud Pinyin Settings</string>
+    <string name="settings_backend_title">Cloud backend</string>
+    <string name="settings_backend_off">Off</string>
+    <string name="settings_backend_google">Google inputtools</string>
+    <string name="settings_backend_baidu">Baidu olime</string>
+    <string name="settings_disclaimer">These third-party endpoints have no official SLA and may stop working at any time. Pinyin text is sent to the selected provider only when enabled.</string>
 </resources>

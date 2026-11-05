@@ -6,12 +6,16 @@ package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import android.app.Service
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.IBinder
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.common.ipc.IFcitxPluginIpc
 import org.fcitx.fcitx5.android.common.ipc.IFcitxPluginIpcCallback
@@ -21,13 +25,24 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Host facing IPC endpoint of the cloud pinyin plugin.
- *
- * This is the skeleton only: the query result is always [PluginIpcResult.Unavailable] and
- * no network access happens here.
  */
 class CloudPinyinService : Service() {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val httpClient = CloudPinyinHttpClient()
+
+    private val repository by lazy {
+        CloudPinyinRepository(
+            scope = scope,
+            backendProvider = { CloudPinyinSettings.backend(this) },
+            onlineCheck = ::isOnline,
+            fetcher = { backend, pinyin, requestId ->
+                httpClient.fetch(backend, pinyin, requestId)
+            },
+            disconnect = httpClient::disconnect
+        )
+    }
 
     private val jobs = ConcurrentHashMap<Long, Job>()
 
@@ -48,23 +63,36 @@ class CloudPinyinService : Service() {
                 reply(callback, requestId, PluginIpcResult.Rejected, null)
                 return
             }
-            val query = runCatching { params.toString(Charsets.UTF_8) }.getOrNull()
-            if (query.isNullOrBlank()) {
+            val pinyin = runCatching { params.toString(Charsets.UTF_8) }.getOrNull()
+            if (pinyin.isNullOrBlank()) {
                 reply(callback, requestId, PluginIpcResult.Rejected, null)
                 return
             }
-            jobs[requestId] = scope.launch {
-                try {
-                    // TODO(3c): query the cloud backend and encode real candidates.
-                    reply(callback, requestId, PluginIpcResult.Unavailable, null)
-                } finally {
-                    jobs.remove(requestId)
-                }
+            val job = scope.launch {
+                val started = System.currentTimeMillis()
+                val result = repository.query(pinyin, requestId)
+                if (!isActive) return@launch
+                val status = if (result.isNullOrEmpty()) PluginIpcResult.Unavailable
+                else PluginIpcResult.Ok
+                Log.d(
+                    TAG,
+                    "request=$requestId method=$METHOD_QUERY status=$status " +
+                        "elapsed=${System.currentTimeMillis() - started}"
+                )
+                reply(
+                    callback,
+                    requestId,
+                    status,
+                    result?.toByteArray(Charsets.UTF_8)
+                )
             }
+            jobs[requestId] = job
+            job.invokeOnCompletion { jobs.remove(requestId) }
         }
 
         override fun cancelRequest(requestId: Long) {
             jobs.remove(requestId)?.cancel()
+            repository.cancel(requestId)
         }
     }
 
@@ -77,6 +105,14 @@ class CloudPinyinService : Service() {
         runCatching { callback.onResult(requestId, result.code, data) }
     }
 
+    private fun isOnline(): Boolean {
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return false
+        val network = manager.activeNetwork ?: return false
+        val capabilities = manager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
@@ -85,6 +121,7 @@ class CloudPinyinService : Service() {
     }
 
     private companion object {
+        const val TAG = "CloudPinyin"
         const val METHOD_QUERY = "cloudpinyin.query"
     }
 }

@@ -1,0 +1,89 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * SPDX-FileCopyrightText: Copyright 2026 Fcitx5 for Android Contributors
+ */
+package org.fcitx.fcitx5.android.plugin.cloud_pinyin
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class CloudPinyinRepositoryTest {
+
+    private fun repository(
+        scope: CoroutineScope,
+        online: Boolean = true,
+        timeoutMillis: Long = 900L,
+        fetcher: suspend (CloudPinyinBackend, String, Long) -> String?
+    ) = CloudPinyinRepository(
+        scope = scope,
+        backendProvider = { CloudPinyinBackend.Google },
+        onlineCheck = { online },
+        fetcher = fetcher,
+        timeoutMillis = timeoutMillis
+    )
+
+    @Test
+    fun testOfflineShortCircuitsWithoutFetch() = runBlocking {
+        var calls = 0
+        val result = repository(this, online = false) { _, _, _ ->
+            calls += 1
+            "候选"
+        }.query("nihao", 1)
+        assertNull(result)
+        assertEquals(0, calls)
+    }
+
+    @Test
+    fun testDuplicateQueriesShareOneFetch() = runBlocking {
+        var calls = 0
+        val repo = repository(this) { _, _, _ ->
+            calls += 1
+            delay(50)
+            "候选"
+        }
+        val a = async { repo.query("nihao", 1) }
+        val b = async { repo.query("nihao", 2) }
+        assertEquals(listOf("候选", "候选"), awaitAll(a, b))
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun testTimeoutReturnsNull() = runBlocking {
+        val repo = repository(this, timeoutMillis = 50) { _, _, _ ->
+            delay(1000)
+            "候选"
+        }
+        assertNull(repo.query("nihao", 1))
+    }
+
+    @Test
+    fun testSuccessIsCached() = runBlocking {
+        var calls = 0
+        val repo = repository(this) { _, _, _ ->
+            calls += 1
+            "候选"
+        }
+        assertEquals("候选", repo.query("nihao", 1))
+        assertEquals("候选", repo.query("nihao", 2))
+        assertEquals(1, calls)
+    }
+
+    @Test
+    fun testFailureBacksOff() = runBlocking {
+        var calls = 0
+        val repo = repository(this) { _, _, _ ->
+            calls += 1
+            null
+        }
+        repeat(3) { repo.query("pinyin$it", it.toLong()) }
+        assertNull(repo.query("another", 9))
+        assertEquals(3, calls)
+    }
+}

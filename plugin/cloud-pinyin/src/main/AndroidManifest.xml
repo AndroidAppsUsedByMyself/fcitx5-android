@@ -2,8 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- The only permission this plugin needs; the host app itself never requests it. -->
+    <!-- The host app itself never requests INTERNET; only this plugin does. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required by ConnectivityManager offline preflight -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:icon="@mipmap/ic_launcher_plugin_generic"
@@ -22,5 +24,14 @@
                 <action android:name="${mainApplicationId}.plugin.SERVICE" />
             </intent-filter>
         </service>
+
+        <activity
+            android:name=".CloudPinyinSettingsActivity"
+            android:exported="true"
+            android:label="@string/settings_title">
+            <intent-filter>
+                <action android:name="${mainApplicationId}.plugin.SETTINGS" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>
