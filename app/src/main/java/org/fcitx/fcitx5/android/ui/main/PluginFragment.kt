@@ -350,23 +350,32 @@ class PluginFragment : PaddingPreferenceFragment() {
     }
 
     private fun startPluginSettingsActivity(descriptor: PluginDescriptor) {
-        val className = descriptor.settingsActivity ?: return
-        val component = ComponentName(
+        val declared = descriptor.settingsActivity ?: return
+        val className = resolveSettingsActivityClass(
+            requireContext().packageManager,
             descriptor.packageName,
-            resolveSettingsActivityClass(descriptor.packageName, className)
-        )
+            declared
+        ) ?: run {
+            showSettingsUnavailable()
+            return
+        }
+        val component = ComponentName(descriptor.packageName, className)
         runCatching {
             startActivity(Intent().apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 this.component = component
             })
         }.onFailure {
-            Toast.makeText(
-                requireContext(),
-                R.string.plugin_settings_unavailable,
-                Toast.LENGTH_SHORT
-            ).show()
+            showSettingsUnavailable()
         }
+    }
+
+    private fun showSettingsUnavailable() {
+        Toast.makeText(
+            requireContext(),
+            R.string.plugin_settings_unavailable,
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun startPluginAboutActivity(pkg: String): Boolean {

@@ -5,28 +5,91 @@
 package org.fcitx.fcitx5.android.core.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SettingsActivityTargetTest {
 
+    private val applicationId = "org.example.plugin.debug"
+    private val namespace = "org.example.plugin"
+
     @Test
-    fun testRelativeClassName() {
+    fun testRelativeNameUsesNamespaceComponent() {
         assertEquals(
-            "org.example.plugin.SettingsActivity",
+            "$namespace.SettingsActivity",
             resolveSettingsActivityClass(
-                "org.example.plugin",
-                ".SettingsActivity"
+                applicationId,
+                ".SettingsActivity",
+                listOf("$namespace.SettingsActivity")
             )
         )
     }
 
     @Test
-    fun testAbsoluteClassName() {
+    fun testRelativeNameFallsBackToApplicationIdComponent() {
         assertEquals(
-            "org.example.other.SettingsActivity",
+            "$applicationId.SettingsActivity",
             resolveSettingsActivityClass(
-                "org.example.plugin",
-                "org.example.other.SettingsActivity"
+                applicationId,
+                ".SettingsActivity",
+                listOf("$applicationId.SettingsActivity")
+            )
+        )
+    }
+
+    @Test
+    fun testRelativeNameWithoutComponentListUsesLegacyExpansion() {
+        assertEquals(
+            "$applicationId.SettingsActivity",
+            resolveSettingsActivityClass(applicationId, ".SettingsActivity", emptyList())
+        )
+    }
+
+    @Test
+    fun testFullyQualifiedNameIsReturned() {
+        assertEquals(
+            "$namespace.SettingsActivity",
+            resolveSettingsActivityClass(
+                applicationId,
+                "$namespace.SettingsActivity",
+                listOf("$namespace.SettingsActivity")
+            )
+        )
+    }
+
+    @Test
+    fun testMissingFullyQualifiedNameIsRejected() {
+        assertNull(
+            resolveSettingsActivityClass(
+                applicationId,
+                "$namespace.SettingsActivity",
+                listOf("$namespace.OtherActivity")
+            )
+        )
+    }
+
+    @Test
+    fun testAmbiguousRelativeNameIsRejected() {
+        assertNull(
+            resolveSettingsActivityClass(
+                applicationId,
+                ".SettingsActivity",
+                listOf(
+                    "org.example.a.SettingsActivity",
+                    "org.example.b.SettingsActivity"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun testShortNameIsResolvedBySuffix() {
+        assertEquals(
+            "$namespace.SettingsActivity",
+            resolveSettingsActivityClass(
+                applicationId,
+                "SettingsActivity",
+                listOf("$namespace.SettingsActivity")
             )
         )
     }

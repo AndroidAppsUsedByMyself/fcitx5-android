@@ -182,11 +182,14 @@ object DataManager {
         packageName: String,
         service: PluginService
     ): Boolean {
-        val component = ComponentName(
+        val declaredServices = getPluginPackageInfo(pm, packageName)
+            .services?.map { it.name }.orEmpty()
+        val className = resolveDeclaredComponent(
             packageName,
-            if (service.component.startsWith(".")) "$packageName${service.component}"
-            else service.component
-        )
+            service.component,
+            declaredServices
+        ) ?: return false
+        val component = ComponentName(packageName, className)
         val componentExists = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pm.getServiceInfo(component, PackageManager.ComponentInfoFlags.of(0L))
@@ -216,7 +219,8 @@ object DataManager {
         } else {
             PackageManager.GET_SIGNATURES
         }
-        val flags = PackageManager.GET_META_DATA or PackageManager.GET_PERMISSIONS or signerFlag
+        val flags = PackageManager.GET_META_DATA or PackageManager.GET_PERMISSIONS or
+            PackageManager.GET_SERVICES or signerFlag
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(flags.toLong()))
         } else {

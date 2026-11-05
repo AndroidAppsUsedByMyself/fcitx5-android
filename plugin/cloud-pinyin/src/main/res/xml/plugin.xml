@@ -6,10 +6,10 @@
         <addon>cloudpinyin</addon>
     </provides>
     <service>
-        <component>.CloudPinyinService</component>
+        <component>org.fcitx.fcitx5.android.plugin.cloud_pinyin.CloudPinyinService</component>
         <!-- Resolved from a build-type specific string resource -->
         <action>@string/ipc_service_action</action>
         <protocolVersion>1</protocolVersion>
     </service>
-    <settingsActivity>.CloudPinyinSettingsActivity</settingsActivity>
+    <settingsActivity>org.fcitx.fcitx5.android.plugin.cloud_pinyin.CloudPinyinSettingsActivity</settingsActivity>
 </plugin>
