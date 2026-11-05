@@ -16,6 +16,7 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.Fcitx
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.core.FcitxLifecycle
+import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.core.lifeCycleScope
 import org.fcitx.fcitx5.android.core.whenReady
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon.connect
@@ -89,6 +90,7 @@ object FcitxDaemon {
         if (realFcitx.lifecycle.currentState == FcitxLifecycle.State.STOPPED) {
             Timber.d("FcitxDaemon start fcitx")
             realFcitx.start()
+            scheduleAddonFallbackCheck()
         }
         val new = mkConnection(name)
         clients[name] = new
@@ -123,6 +125,7 @@ object FcitxDaemon {
             .build().let { appContext.notificationManager.notify(id, it) }
         realFcitx.stop()
         realFcitx.start()
+        scheduleAddonFallbackCheck()
         FcitxApplication.getInstance().coroutineScope.launch {
             // cancel notification on ready
             realFcitx.lifecycle.whenReady {
@@ -148,6 +151,49 @@ object FcitxDaemon {
      */
     fun startFcitx() {
         realFcitx.start()
+        scheduleAddonFallbackCheck()
+    }
+
+    private const val PINYIN_ADDON = "pinyin"
+
+    private var addonFallbackRestarted = false
+
+    /**
+     * pinyin caches the result of its first cloudpinyin() lookup for the lifetime of the
+     * addon instance. If a dependency addon provided by an enabled plugin is registered
+     * on-demand but was not loaded when pinyin initialized, cloud candidates stay
+     * unavailable until fcitx is restarted. Restart once as a fallback.
+     */
+    private fun scheduleAddonFallbackCheck() {
+        FcitxApplication.getInstance().coroutineScope.launch {
+            val missing = realFcitx.lifecycle.whenReady {
+                if (addonFallbackRestarted) {
+                    emptySet()
+                } else {
+                    fcitxImpl.missingPinyinDependencyAddons()
+                }
+            }
+            if (missing.isNotEmpty() && !addonFallbackRestarted) {
+                addonFallbackRestarted = true
+                Timber.w("Pinyin dependency addon(s) $missing are on-demand, restarting fcitx once")
+                restartFcitx()
+            }
+        }
+    }
+
+    private suspend fun FcitxAPI.missingPinyinDependencyAddons(): Set<String> {
+        val pluginAddons = DataManager.getMergedPlugins()
+            .mapNotNull { it.provides?.addons }
+            .flatten()
+            .toSet()
+        if (pluginAddons.isEmpty()) return emptySet()
+        val pinyin = addons().firstOrNull { it.uniqueName == PINYIN_ADDON } ?: return emptySet()
+        val dependencies = (pinyin.dependencies + pinyin.optionalDependencies).toSet()
+        val loaded = loadedAddonNames().toSet()
+        val onDemand = onDemandAddonNames().toSet()
+        return pluginAddons.filter {
+            it in dependencies && it in onDemand && it !in loaded
+        }.toSet()
     }
 
     init {
