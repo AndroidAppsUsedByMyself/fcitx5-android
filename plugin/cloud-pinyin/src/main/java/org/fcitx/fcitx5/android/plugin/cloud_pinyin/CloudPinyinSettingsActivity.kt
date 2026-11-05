@@ -11,6 +11,7 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.Window
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -28,7 +29,11 @@ class CloudPinyinSettingsActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val scroll = ScrollView(this)
+        requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val scroll = ScrollView(this).apply {
+            // Keep content clear of the status bar under edge-to-edge enforcement.
+            fitsSystemWindows = true
+        }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -46,6 +51,7 @@ class CloudPinyinSettingsActivity : Activity() {
         content.removeAllViews()
         val snapshot = CloudPinyinSettings.snapshot(this)
 
+        content.addView(heading(getString(R.string.settings_title)))
         content.addView(heading(getString(R.string.settings_providers_title)))
         if (snapshot.providers.isEmpty()) {
             content.addView(body(getString(R.string.settings_providers_empty)))
