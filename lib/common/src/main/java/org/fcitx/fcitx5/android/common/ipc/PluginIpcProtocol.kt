@@ -18,7 +18,10 @@ object PluginIpcProtocol {
 
     const val MAX_VERSION = 1
 
-    const val TIMEOUT_MILLIS = 500L
+    /**
+     * Must stay below the 1s placeholder threshold in the upstream pinyin engine.
+     */
+    const val TIMEOUT_MILLIS = 900L
 
     const val SERVICE_ACTION_SUFFIX = ".plugin.SERVICE"
 }

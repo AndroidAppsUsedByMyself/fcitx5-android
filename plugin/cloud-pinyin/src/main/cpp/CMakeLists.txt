@@ -24,8 +24,18 @@ if (NOT EXISTS "${CLOUDPINYIN_SOURCE_DIR}/cloudpinyin_public.h")
             "refusing to build an ABI-mismatched cloudpinyin addon.")
 endif()
 
+set(ANDROID_IPC_BRIDGE_DIR
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../app/src/main/cpp/androidipcbridge")
+if (NOT EXISTS "${ANDROID_IPC_BRIDGE_DIR}/androidipcbridge.h")
+    message(FATAL_ERROR
+            "androidipcbridge.h not found under '${ANDROID_IPC_BRIDGE_DIR}'. "
+            "The host addon interface changed; refusing to build cloudpinyin.")
+endif()
+
 add_library(cloudpinyin MODULE cloudpinyin.cpp)
-target_include_directories(cloudpinyin PRIVATE "${CLOUDPINYIN_SOURCE_DIR}")
+target_include_directories(cloudpinyin PRIVATE
+        "${CLOUDPINYIN_SOURCE_DIR}"
+        "${ANDROID_IPC_BRIDGE_DIR}")
 target_compile_features(cloudpinyin PRIVATE cxx_std_20)
 target_link_libraries(cloudpinyin Fcitx5::Core Fcitx5::Utils)
 
