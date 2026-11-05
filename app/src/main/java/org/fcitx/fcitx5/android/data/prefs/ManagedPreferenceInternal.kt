@@ -15,6 +15,9 @@ abstract class ManagedPreferenceInternal(private val sharedPreferences: SharedPr
     protected fun string(key: String, defaultValue: String) =
         ManagedPreference.PString(sharedPreferences, key, defaultValue).apply { register() }
 
+    protected fun stringSet(key: String, defaultValue: Set<String>) =
+        ManagedPreference.PStringSet(sharedPreferences, key, defaultValue).apply { register() }
+
     protected fun <T : Any> stringLike(
         key: String,
         codec: ManagedPreference.StringLikeCodec<T>,

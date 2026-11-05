@@ -19,6 +19,7 @@ import org.fcitx.fcitx5.android.common.plugin.PluginManifestResult
 import org.fcitx.fcitx5.android.common.plugin.PluginService
 import org.fcitx.fcitx5.android.common.util.PathSafety
 import org.fcitx.fcitx5.android.core.data.DataManager.dataDir
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.utils.FileUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import timber.log.Timber
@@ -252,7 +253,22 @@ object DataManager {
         val (parsedDescriptors, failed) = detectPlugins()
         failedPlugins.putAll(failed)
 
-        Timber.d("Plugins to load: $parsedDescriptors")
+        val prefs = AppPrefs.getInstance().internal
+        val previouslyEnabled = prefs.enabledPlugins.getValue()
+        val enablement = PluginEnablement.resolve(
+            parsedDescriptors,
+            previouslyEnabled,
+            prefs.knownPlugins.getValue()
+        )
+        if (enablement.enabled != previouslyEnabled) {
+            prefs.enabledPlugins.setValue(enablement.enabled)
+        }
+        if (enablement.known != prefs.knownPlugins.getValue()) {
+            prefs.knownPlugins.setValue(enablement.known)
+        }
+        val enabledDescriptors = PluginEnablement.filterEnabled(parsedDescriptors, enablement.enabled)
+
+        Timber.d("Plugins to load: $enabledDescriptors")
 
         // Create an empty hierarchy
         val newHierarchy = DataHierarchy()
@@ -261,8 +277,8 @@ object DataManager {
 
         val pluginAssets = mutableMapOf<String, AssetManager>()
 
-        // Add plugin's one by one
-        for (plugin in parsedDescriptors) {
+        // Add enabled plugins one by one
+        for (plugin in enabledDescriptors) {
             val pluginContext = appContext.createPackageContext(plugin.packageName, 0)
             val assets = pluginContext.assets
             val descriptor = runCatching { assets.getDataDescriptor() }.onFailure {

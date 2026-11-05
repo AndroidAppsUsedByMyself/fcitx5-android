@@ -36,6 +36,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val pid = int("pid", 0)
         val editorInfoInspector = bool("editor_info_inspector", false)
         val needNotifications = bool("need_notifications", true)
+        val enabledPlugins = stringSet("enabled_plugins", emptySet())
+        val knownPlugins = stringSet("known_plugins", emptySet())
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
