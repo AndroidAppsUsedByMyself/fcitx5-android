@@ -10,6 +10,12 @@
 
 # Keep JNI interface
 -keep class org.fcitx.fcitx5.android.core.* { *; }
+# Resolved by name from JNI_OnLoad, so R8 cannot see the reference
+-keep class org.fcitx.fcitx5.android.core.ipc.PluginIpcNativeBridge {
+    public static boolean request(long, java.lang.String, byte[]);
+    public static void cancel(long);
+    private static native void nativeIpcResponse(long, int, byte[]);
+}
 -keep class org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase {
     public <init>(...);
 }
