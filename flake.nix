@@ -30,11 +30,11 @@
 
               # Update versions here
               # This should match to build-logic/convention/src/main/kotlin/Versions.kt
-              cmakeVersion = "3.31.6";
-              buildToolsVersion = "36.1.0";
-              platformToolsVersion = "36.0.2";
+              cmakeVersion = "4.1.2";
+              buildToolsVersion = "37.0.0";
+              platformToolsVersion = "37.0.1";
               platformVersion = "36";
-              ndkVersion = "28.0.13004108";
+              ndkVersion = "29.0.14206865";
 
               includeNDK = true;
               androidComposition = final.androidenv.composeAndroidPackages {
@@ -53,7 +53,7 @@
                   mkShell rec {
                     buildInputs = [
                       androidComposition.androidsdk
-                      extra-cmake-modules
+                      kdePackages.extra-cmake-modules
                       gettext
                       python3
                       icu
@@ -66,7 +66,7 @@
                     BUILD_TOOLS_VERSION = buildToolsVersion;
                     GRADLE_OPTS =
                       "-Dorg.gradle.project.android.aapt2FromMavenOverride=${androidComposition.androidsdk}/libexec/android-sdk/build-tools/${buildToolsVersion}/aapt2";
-                    ECM_DIR = "${extra-cmake-modules}/share/ECM/cmake/";
+                    ECM_DIR = "${kdePackages.extra-cmake-modules}/share/ECM/cmake/";
                     JAVA_HOME = "${jdk17}";
                     shellHook = lib.optionalString exportCMakeBin ''
                       export PATH="$ANDROID_SDK_ROOT/cmake/${cmakeVersion}/bin:$PATH"
