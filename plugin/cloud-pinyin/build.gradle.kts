@@ -3,6 +3,7 @@ plugins {
     id("org.fcitx.fcitx5.android.plugin-app-convention")
     id("org.fcitx.fcitx5.android.native-app-convention")
     id("org.fcitx.fcitx5.android.data-descriptor")
+    id("org.fcitx.fcitx5.android.fcitx-component")
 }
 
 android {

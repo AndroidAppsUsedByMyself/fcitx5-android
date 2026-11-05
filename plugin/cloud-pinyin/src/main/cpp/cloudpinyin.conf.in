@@ -1,0 +1,10 @@
+[Addon]
+Name=Cloud Pinyin
+Category=Module
+Version=@VERSION_NAME@
+Library=libcloudpinyin
+Type=SharedLibrary
+OnDemand=True
+
+[Addon/Dependencies]
+0=core

@@ -28,3 +28,9 @@ add_library(cloudpinyin MODULE cloudpinyin.cpp)
 target_include_directories(cloudpinyin PRIVATE "${CLOUDPINYIN_SOURCE_DIR}")
 target_compile_features(cloudpinyin PRIVATE cxx_std_20)
 target_link_libraries(cloudpinyin Fcitx5::Core Fcitx5::Utils)
+
+# Installed into the plugin assets so the host can merge it into its data directory.
+configure_file(cloudpinyin.conf.in cloudpinyin.conf @ONLY)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cloudpinyin.conf"
+        DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon"
+        COMPONENT config)
