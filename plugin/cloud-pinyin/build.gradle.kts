@@ -1,6 +1,8 @@
 plugins {
     id("org.fcitx.fcitx5.android.app-convention")
     id("org.fcitx.fcitx5.android.plugin-app-convention")
+    id("org.fcitx.fcitx5.android.native-app-convention")
+    id("org.fcitx.fcitx5.android.data-descriptor")
 }
 
 android {
@@ -8,6 +10,15 @@ android {
 
     defaultConfig {
         applicationId = "org.fcitx.fcitx5.android.plugin.cloud_pinyin"
+
+        @Suppress("UnstableApiUsage")
+        externalNativeBuild {
+            cmake {
+                targets(
+                    "cloudpinyin"
+                )
+            }
+        }
     }
 
     buildFeatures {
@@ -28,9 +39,19 @@ android {
             )
         }
     }
+
+    packaging {
+        jniLibs {
+            excludes += setOf(
+                "**/libc++_shared.so",
+                "**/libFcitx5*"
+            )
+        }
+    }
 }
 
 dependencies {
+    implementation(project(":lib:fcitx5"))
     implementation(project(":lib:plugin-base"))
     implementation(libs.kotlinx.coroutines)
 }
