@@ -9,6 +9,11 @@ plugins {
 android {
     namespace = "org.fcitx.fcitx5.android.plugin.cloud_pinyin"
 
+    // Ship the license and NOTICE inside the APK; they are also kept as source files.
+    sourceSets {
+        getByName("main").assets.srcDir("LICENSES")
+    }
+
     defaultConfig {
         applicationId = "org.fcitx.fcitx5.android.plugin.cloud_pinyin"
 

@@ -1,0 +1,21 @@
+Cloud Pinyin plugin for Fcitx5 for Android
+==========================================
+
+This plugin contains an independent implementation of the fcitx5 `cloudpinyin`
+addon. Its source code is written for this project; it is not copied from the
+fcitx5-chinese-addons implementation.
+
+The addon ABI (`cloudpinyin_public.h`), the `cloudpinyin.conf` schema, the
+interface semantics (including the `ICloudPinyin` request/callback contract and
+the minimum pinyin length), the endpoint URLs, and the server response samples
+used by the parser tests were referenced from fcitx5-chinese-addons:
+
+  Upstream: https://github.com/fcitx/fcitx5-chinese-addons
+  Pinned commit: 19f06898581419d3e4d37492f33a14e841e2680e
+
+fcitx5-chinese-addons is licensed under the GNU Lesser General Public License,
+version 2.1 or later. This plugin is distributed under the same license; the
+complete license text is in `LICENSES/LGPL-2.1-or-later.txt`.
+
+`cloudpinyin_public.h` is consumed directly from the pinned submodule at build
+time; no copy of it is vendored in this repository.
