@@ -29,6 +29,8 @@ import java.security.MessageDigest
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+private const val INTERNET_PERMISSION = "android.permission.INTERNET"
+
 /**
  * Build up a Filesystem hierarchy at [dataDir]
  *
@@ -135,7 +137,8 @@ object DataManager {
                     continue
                 }
                 val info = getPluginPackageInfo(pm, packageName)
-                val origin = signaturePolicy.originOf(signerFingerprints(info))
+                val fingerprints = signerFingerprints(info)
+                val origin = signaturePolicy.originOf(fingerprints)
                 toLoad.add(
                     PluginDescriptor(
                         packageName = packageName,
@@ -148,7 +151,9 @@ object DataManager {
                         service = service,
                         hasService = manifest.hasService || service != null,
                         versionName = info.versionName ?: "",
-                        nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: ""
+                        nativeLibraryDir = info.applicationInfo?.nativeLibraryDir ?: "",
+                        signerFingerprint = fingerprints.minOrNull(),
+                        requestsInternet = info.requestedPermissions?.contains(INTERNET_PERMISSION) == true
                     )
                 )
             } else {
@@ -210,7 +215,7 @@ object DataManager {
         } else {
             PackageManager.GET_SIGNATURES
         }
-        val flags = PackageManager.GET_META_DATA or signerFlag
+        val flags = PackageManager.GET_META_DATA or PackageManager.GET_PERMISSIONS or signerFlag
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             pm.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(flags.toLong()))
         } else {

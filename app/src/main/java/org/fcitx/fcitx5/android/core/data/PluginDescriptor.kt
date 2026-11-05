@@ -135,9 +135,20 @@ data class PluginDescriptor(
      */
     val hasService: Boolean,
     val versionName: String,
-    val nativeLibraryDir: String
+    val nativeLibraryDir: String,
+    /**
+     * Lowercase hex SHA-256 of the APK signer certificate, or `null` if unavailable.
+     */
+    val signerFingerprint: String? = null,
+    /**
+     * Whether the plugin APK itself requests `android.permission.INTERNET`.
+     */
+    val requestsInternet: Boolean = false
 ) {
     val builtForHost: Boolean = matchedAction in PluginManifestActions.hostActions
+
+    val declaresIpc: Boolean
+        get() = service != null || hasService
 
     companion object {
         const val pluginAPI = "0.1"

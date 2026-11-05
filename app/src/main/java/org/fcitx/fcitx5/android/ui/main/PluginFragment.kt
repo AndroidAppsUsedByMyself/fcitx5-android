@@ -13,9 +13,12 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceScreen
+import androidx.preference.SwitchPreferenceCompat
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.fcitx.fcitx5.android.R
@@ -27,10 +30,12 @@ import org.fcitx.fcitx5.android.core.data.FileSource
 import org.fcitx.fcitx5.android.core.data.PluginDescriptor
 import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
 import org.fcitx.fcitx5.android.core.data.PluginManifestActions
+import org.fcitx.fcitx5.android.core.data.PluginOrigin
 import org.fcitx.fcitx5.android.core.data.PluginServiceState
 import org.fcitx.fcitx5.android.core.data.PluginState
 import org.fcitx.fcitx5.android.core.data.PluginStateResolver
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.utils.addCategory
 import org.fcitx.fcitx5.android.utils.addPreference
@@ -123,7 +128,13 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private fun createPreferenceScreen(): PreferenceScreen =
         preferenceManager.createPreferenceScreen(requireContext()).apply {
-            if (synced != detected) {
+            val enabledPlugins = AppPrefs.getInstance().internal.enabledPlugins.getValue()
+            val needsReload = detected.merged.any {
+                it.packageName in enabledPlugins && it !in synced.merged
+            } || synced.merged.any {
+                it.packageName !in enabledPlugins || it !in detected.merged
+            }
+            if (needsReload) {
                 addPreference(R.string.plugin_needs_reload, icon = R.drawable.ic_baseline_info_24) {
                     DataManager.addOnNextSyncedCallback {
                         lifecycleScope.launch {
@@ -137,8 +148,8 @@ class PluginFragment : PaddingPreferenceFragment() {
                     FcitxDaemon.restartFcitx()
                 }
             }
-            val (merged, failed) = synced
-            if (merged.isEmpty() && failed.isEmpty()) {
+            val failed = synced.failed
+            if (detected.merged.isEmpty() && failed.isEmpty()) {
                 // use PreferenceCategory to show a divider below the "reload" preference
                 addCategory(R.string.no_plugins) {
                     isIconSpaceReserved = false
@@ -149,18 +160,40 @@ class PluginFragment : PaddingPreferenceFragment() {
                 }
                 return@apply
             }
-            if (merged.isNotEmpty()) {
-                addCategory(R.string.plugins_loaded) {
+            listOf(
+                PluginOrigin.Official to R.string.plugins_official,
+                PluginOrigin.Downstream to R.string.plugins_downstream,
+                PluginOrigin.ThirdParty to R.string.plugins_third_party
+            ).forEach { (origin, title) ->
+                val plugins = detected.merged
+                    .filter { it.origin == origin }
+                    .sortedBy { it.packageName }
+                if (plugins.isEmpty()) return@forEach
+                addCategory(title) {
                     isIconSpaceReserved = false
-                    merged.sortedBy { it.packageName }.forEach { descriptor ->
+                    plugins.forEach { descriptor ->
                         val state = PluginStateResolver.resolve(
                             descriptor,
                             addonRuntime,
                             FcitxPluginServices.isBound(descriptor.packageName)
                         )
-                        addPreference(descriptor.packageName, pluginSummary(descriptor, state)) {
-                            startPluginAboutActivity(descriptor.packageName)
-                        }
+                        val enabled = descriptor.packageName in enabledPlugins
+                        addPreference(SwitchPreferenceCompat(context).apply {
+                            this.title = descriptor.packageName
+                            key = descriptor.packageName
+                            isPersistent = false
+                            isChecked = enabled
+                            summary = pluginSummary(descriptor, state, enabled)
+                            setOnPreferenceChangeListener { _, newValue ->
+                                val enable = newValue as Boolean
+                                if (enable && descriptor.origin == PluginOrigin.ThirdParty) {
+                                    confirmThirdPartyPlugin(descriptor)
+                                } else {
+                                    setPluginEnabled(descriptor, enable)
+                                }
+                                false
+                            }
+                        })
                     }
                 }
             }
@@ -208,9 +241,22 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private fun pluginSummary(
         descriptor: PluginDescriptor,
-        state: PluginState.Active
+        state: PluginState.Active,
+        enabled: Boolean
     ): String {
         val lines = mutableListOf("${descriptor.versionName}\n${descriptor.description}")
+        lines += descriptor.signerFingerprint?.let {
+            getString(R.string.plugin_signature, it.take(16))
+        } ?: getString(R.string.plugin_signature_unknown)
+        if (descriptor.requestsInternet) {
+            lines += getString(R.string.plugin_capability_internet)
+        }
+        if (descriptor.declaresIpc) {
+            lines += getString(R.string.plugin_capability_ipc)
+        }
+        if (!enabled) {
+            lines += getString(R.string.plugin_disabled)
+        }
         if (state.addons.isEmpty()) {
             lines += getString(R.string.plugin_addon_none)
         } else {
@@ -241,6 +287,47 @@ class PluginFragment : PaddingPreferenceFragment() {
             }
         }
         return lines.joinToString("\n")
+    }
+
+    private fun setPluginEnabled(descriptor: PluginDescriptor, enabled: Boolean) {
+        val prefs = AppPrefs.getInstance().internal
+        val updated = prefs.enabledPlugins.getValue().toMutableSet()
+        if (enabled) {
+            updated.add(descriptor.packageName)
+        } else {
+            updated.remove(descriptor.packageName)
+        }
+        prefs.enabledPlugins.setValue(updated)
+        Toast.makeText(
+            requireContext(),
+            getString(
+                if (enabled) R.string.plugin_enabled_restart
+                else R.string.plugin_disabled_restart
+            ),
+            Toast.LENGTH_SHORT
+        ).show()
+        DataManager.addOnNextSyncedCallback {
+            lifecycleScope.launch {
+                synced = DataManager.getSyncedPluginSet()
+                detected = DataManager.detectPlugins()
+                addonRuntime = queryAddonRuntime()
+                preferenceScreen = createPreferenceScreen()
+            }
+        }
+        FcitxDaemon.restartFcitx()
+    }
+
+    private fun confirmThirdPartyPlugin(descriptor: PluginDescriptor) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.plugin_third_party_trust_title)
+            .setMessage(
+                getString(R.string.plugin_third_party_trust_message, descriptor.packageName)
+            )
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                setPluginEnabled(descriptor, true)
+            }
+            .show()
     }
 
     private fun startPluginAboutActivity(pkg: String): Boolean {
