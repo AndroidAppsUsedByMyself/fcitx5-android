@@ -131,6 +131,17 @@
             android:theme="@style/Theme.DialogTheme"
             android:windowSoftInputMode="stateAlwaysVisible|adjustPan" />
 
+        <activity
+            android:name=".ui.main.ClipboardSearchActivity"
+            android:autoRemoveFromRecents="true"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:label="@string/clipboard_search"
+            android:launchMode="singleInstance"
+            android:taskAffinity=".ui.main.ClipboardSearchActivity"
+            android:theme="@style/Theme.DialogTheme"
+            android:windowSoftInputMode="stateAlwaysVisible|adjustResize" />
+
         <service
             android:name=".input.FcitxInputMethodService"
             android:directBootAware="true"

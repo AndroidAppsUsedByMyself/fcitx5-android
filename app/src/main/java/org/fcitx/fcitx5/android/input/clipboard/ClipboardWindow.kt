@@ -168,6 +168,9 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
                     promptDeleteAll(ClipboardManager.haveUnpinned())
                 }
             }
+            searchButton.setOnClickListener {
+                AppUtil.launchClipboardSearch(context)
+            }
         }
     }
 

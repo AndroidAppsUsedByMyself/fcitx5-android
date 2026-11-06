@@ -32,7 +32,7 @@ data class ClipboardEntry(
 
         const val TABLE_NAME = "clipboard"
 
-        private val IS_SENSITIVE = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val IS_SENSITIVE = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ClipDescription.EXTRA_IS_SENSITIVE
         } else {
             "android.content.extra.IS_SENSITIVE"
