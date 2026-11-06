@@ -4,12 +4,15 @@
  */
 package org.fcitx.fcitx5.android.core
 
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.ServiceConnection
 import android.os.IBinder
 import android.os.RemoteException
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,7 +57,34 @@ object FcitxPluginServices {
 
     private val bindingGuards = ConcurrentHashMap<String, AtomicBoolean>()
 
+    private val serviceConnections = ConcurrentHashMap<String, ServiceConnection>()
+
     private val timeouts = ConcurrentHashMap<Long, Job>()
+
+    init {
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(
+            appContext,
+            object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) {
+                    val packageName = intent.data?.schemeSpecificPart ?: return
+                    if (connections.containsKey(packageName) ||
+                        bindingGuards.containsKey(packageName)
+                    ) {
+                        Timber.d("Plugin package changed, resetting IPC: $packageName")
+                        resetPluginConnection(packageName)
+                    }
+                }
+            },
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+    }
 
     @Volatile
     private var resultSink: ((Long, Int, ByteArray?) -> Unit)? = null
@@ -176,6 +206,7 @@ object FcitxPluginServices {
             }
         }
         val intent = Intent(PLUGIN_SERVICE_ACTION).setPackage(packageName)
+        serviceConnections[packageName] = connection
         val started = runCatching {
             appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }.getOrElse { e ->
@@ -201,21 +232,27 @@ object FcitxPluginServices {
                     connections[packageName] = Connection(packageName, service)
                     releaseBindGuard(packageName)
                     Timber.d("IPC connected: $packageName")
-                    session.takeAllOf(packageName).forEach { deliver(it) }
+                    // Deliver the requests queued while binding, but keep them tracked:
+                    // their replies must still find a pending entry, otherwise they are
+                    // dropped as late and the caller waits for the placeholder forever.
+                    session.pendingOf(packageName).forEach { deliver(it) }
                 }
 
                 PluginIpcHandshake.Incompatible -> {
                     failAll(packageName, PluginIpcResult.ProtocolIncompatible)
+                    unbind(packageName)
                     releaseBindGuard(packageName)
                 }
 
                 PluginIpcHandshake.Rejected -> {
                     failAll(packageName, PluginIpcResult.Rejected)
+                    unbind(packageName)
                     releaseBindGuard(packageName)
                 }
 
                 null -> {
                     failAll(packageName, PluginIpcResult.Unavailable)
+                    unbind(packageName)
                     releaseBindGuard(packageName)
                 }
             }
@@ -251,15 +288,39 @@ object FcitxPluginServices {
 
     private fun onBindingUnusable(packageName: String) {
         failAll(packageName, PluginIpcResult.Unavailable)
+        unbind(packageName)
         session.markUnbound(packageName)
         releaseBindGuard(packageName)
     }
 
     private fun onConnectionLost(packageName: String) {
         connections.remove(packageName)
+        // Finish every pending request instead of leaving callers (and their UI) waiting
+        // for a reply that can never arrive.
+        failAll(packageName, PluginIpcResult.Unavailable)
+        unbind(packageName)
         session.markUnbound(packageName)
         releaseBindGuard(packageName)
+    }
+
+    /**
+     * A plugin package was installed, replaced or removed while the host was running.
+     * Drop the old binding so the next request binds the new APK instead of reusing a
+     * binder from the previous installation.
+     */
+    private fun resetPluginConnection(packageName: String) {
+        connections.remove(packageName)
         failAll(packageName, PluginIpcResult.Unavailable)
+        unbind(packageName)
+        session.markUnbound(packageName)
+        releaseBindGuard(packageName)
+    }
+
+    private fun unbind(packageName: String) {
+        serviceConnections.remove(packageName)?.let { connection ->
+            runCatching { appContext.unbindService(connection) }
+                .onFailure { e -> Timber.w(e, "unbind IPC service of $packageName failed") }
+        }
     }
 
     private fun releaseBindGuard(packageName: String) {
@@ -274,7 +335,7 @@ object FcitxPluginServices {
     }
 
     fun disconnectAll() {
-        connections.keys.toList().forEach { onConnectionLost(it) }
+        connections.keys.toList().forEach { resetPluginConnection(it) }
         connections.clear()
     }
 }

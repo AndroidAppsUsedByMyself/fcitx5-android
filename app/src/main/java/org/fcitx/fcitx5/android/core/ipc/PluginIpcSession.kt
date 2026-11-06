@@ -87,6 +87,11 @@ class PluginIpcSession {
     @Synchronized
     fun takeOnCancel(requestId: Long): Pending? = pending.remove(requestId)
 
+    /** Requests queued for [packageName] while its service was not connected yet. */
+    @Synchronized
+    fun pendingOf(packageName: String): List<Pending> =
+        pending.values.filter { it.packageName == packageName }
+
     /** Remove every request belonging to [packageName], e.g. when its service dies. */
     @Synchronized
     fun takeAllOf(packageName: String): List<Pending> {
