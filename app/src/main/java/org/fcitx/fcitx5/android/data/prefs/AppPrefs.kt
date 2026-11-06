@@ -38,6 +38,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val needNotifications = bool("need_notifications", true)
         val enabledPlugins = stringSet("enabled_plugins", emptySet())
         val knownPlugins = stringSet("known_plugins", emptySet())
+        val pluginSigners = stringSet("plugin_signers", emptySet())
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {

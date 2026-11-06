@@ -25,14 +25,19 @@ object PluginEnablement {
     fun resolve(
         descriptors: Collection<PluginDescriptor>,
         enabled: Set<String>,
-        known: Set<String>
+        known: Set<String>,
+        blocked: Set<String> = emptySet()
     ): PluginEnablementState {
         val updatedKnown = known.toMutableSet()
         val updatedEnabled = enabled.toMutableSet()
+        // A changed signer revokes the previous approval, even for trusted certificates
+        updatedEnabled.removeAll(blocked)
         descriptors.forEach { descriptor ->
             if (descriptor.packageName !in updatedKnown) {
                 updatedKnown.add(descriptor.packageName)
-                if (descriptor.origin != PluginOrigin.ThirdParty) {
+                if (descriptor.origin != PluginOrigin.ThirdParty &&
+                    descriptor.packageName !in blocked
+                ) {
                     updatedEnabled.add(descriptor.packageName)
                 }
             }

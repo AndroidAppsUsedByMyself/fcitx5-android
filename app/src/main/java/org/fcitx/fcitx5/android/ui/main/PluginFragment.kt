@@ -33,6 +33,8 @@ import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
 import org.fcitx.fcitx5.android.core.data.PluginManifestActions
 import org.fcitx.fcitx5.android.core.data.PluginOrigin
 import org.fcitx.fcitx5.android.core.data.PluginServiceState
+import org.fcitx.fcitx5.android.core.data.PluginSignatureState
+import org.fcitx.fcitx5.android.core.data.PluginSignerApprovals
 import org.fcitx.fcitx5.android.core.data.PluginState
 import org.fcitx.fcitx5.android.core.data.PluginStateResolver
 import org.fcitx.fcitx5.android.core.data.resolveSettingsActivityClass
@@ -130,7 +132,9 @@ class PluginFragment : PaddingPreferenceFragment() {
 
     private fun createPreferenceScreen(): PreferenceScreen =
         preferenceManager.createPreferenceScreen(requireContext()).apply {
-            val enabledPlugins = AppPrefs.getInstance().internal.enabledPlugins.getValue()
+            val internalPrefs = AppPrefs.getInstance().internal
+            val enabledPlugins = internalPrefs.enabledPlugins.getValue()
+            val approvals = PluginSignerApprovals.load(internalPrefs.pluginSigners.getValue())
             val needsReload = detected.merged.any {
                 it.packageName in enabledPlugins && it !in synced.merged
             } || synced.merged.any {
@@ -182,19 +186,25 @@ class PluginFragment : PaddingPreferenceFragment() {
                                 FcitxPluginServices.connectionState(descriptor.packageName)
                             )
                         )
-                        val enabled = descriptor.packageName in enabledPlugins
+                        val signatureState =
+                            PluginSignerApprovals.evaluate(descriptor, approvals)
+                        val enabled = descriptor.packageName in enabledPlugins &&
+                            signatureState !is PluginSignatureState.Changed
                         addPreference(SwitchPreferenceCompat(context).apply {
                             this.title = descriptor.packageName
                             key = descriptor.packageName
                             isPersistent = false
                             isChecked = enabled
-                            summary = pluginSummary(descriptor, state, enabled)
+                            summary = pluginSummary(descriptor, state, enabled, signatureState)
                             setOnPreferenceChangeListener { _, newValue ->
                                 val enable = newValue as Boolean
-                                if (enable && descriptor.origin == PluginOrigin.ThirdParty) {
-                                    confirmThirdPartyPlugin(descriptor)
-                                } else {
-                                    setPluginEnabled(descriptor, enable)
+                                when {
+                                    !enable -> setPluginEnabled(descriptor, false)
+                                    signatureState is PluginSignatureState.Changed ->
+                                        confirmSignatureChange(descriptor, signatureState)
+                                    descriptor.origin == PluginOrigin.ThirdParty ->
+                                        confirmThirdPartyPlugin(descriptor)
+                                    else -> setPluginEnabled(descriptor, true)
                                 }
                                 false
                             }
@@ -264,12 +274,19 @@ class PluginFragment : PaddingPreferenceFragment() {
     private fun pluginSummary(
         descriptor: PluginDescriptor,
         state: PluginState.Active,
-        enabled: Boolean
+        enabled: Boolean,
+        signatureState: PluginSignatureState
     ): String {
         val lines = mutableListOf("${descriptor.versionName}\n${descriptor.description}")
         lines += descriptor.signerFingerprint?.let {
             getString(R.string.plugin_signature, it.take(16))
         } ?: getString(R.string.plugin_signature_unknown)
+        if (signatureState is PluginSignatureState.Changed) {
+            lines += getString(
+                R.string.plugin_signature_changed,
+                signatureState.previousFingerprint.take(16)
+            )
+        }
         if (descriptor.requestsInternet) {
             lines += getString(R.string.plugin_capability_internet)
         }
@@ -357,9 +374,42 @@ class PluginFragment : PaddingPreferenceFragment() {
             )
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(android.R.string.ok) { _, _ ->
+                approveCurrentSigner(descriptor)
                 setPluginEnabled(descriptor, true)
             }
             .show()
+    }
+
+    private fun confirmSignatureChange(
+        descriptor: PluginDescriptor,
+        state: PluginSignatureState.Changed
+    ) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.plugin_signature_change_title)
+            .setMessage(
+                getString(
+                    R.string.plugin_signature_change_message,
+                    descriptor.packageName,
+                    state.previousFingerprint,
+                    state.currentFingerprint
+                        ?: getString(R.string.plugin_signature_none)
+                )
+            )
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.plugin_signature_change_confirm) { _, _ ->
+                approveCurrentSigner(descriptor)
+                setPluginEnabled(descriptor, true)
+            }
+            .show()
+    }
+
+    private fun approveCurrentSigner(descriptor: PluginDescriptor) {
+        val fingerprint = descriptor.signerFingerprint ?: return
+        val prefs = AppPrefs.getInstance().internal
+        val approvals = PluginSignerApprovals.load(prefs.pluginSigners.getValue())
+        prefs.pluginSigners.setValue(
+            PluginSignerApprovals.encode(approvals + (descriptor.packageName to fingerprint))
+        )
     }
 
     private fun startPluginSettingsActivity(descriptor: PluginDescriptor) {

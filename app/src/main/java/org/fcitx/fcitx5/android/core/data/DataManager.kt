@@ -264,11 +264,33 @@ object DataManager {
         failedPlugins.putAll(failed)
 
         val prefs = AppPrefs.getInstance().internal
+        val approvals = PluginSignerApprovals.load(prefs.pluginSigners.getValue())
+        val revokedSigners = parsedDescriptors.mapNotNull { descriptor ->
+            when (val state = PluginSignerApprovals.evaluate(descriptor, approvals)) {
+                is PluginSignatureState.Changed -> {
+                    Timber.w(
+                        "Signer of '${descriptor.packageName}' changed " +
+                            "(${state.previousFingerprint} -> ${state.currentFingerprint}), " +
+                            "revoking trust"
+                    )
+                    descriptor.packageName
+                }
+
+                else -> null
+            }
+        }.toSet()
+        val baselinedApprovals =
+            PluginSignerApprovals.baseline(parsedDescriptors, approvals)
+        if (baselinedApprovals != approvals) {
+            prefs.pluginSigners.setValue(PluginSignerApprovals.encode(baselinedApprovals))
+        }
+
         val previouslyEnabled = prefs.enabledPlugins.getValue()
         val enablement = PluginEnablement.resolve(
             parsedDescriptors,
             previouslyEnabled,
-            prefs.knownPlugins.getValue()
+            prefs.knownPlugins.getValue(),
+            blocked = revokedSigners
         )
         if (enablement.enabled != previouslyEnabled) {
             prefs.enabledPlugins.setValue(enablement.enabled)

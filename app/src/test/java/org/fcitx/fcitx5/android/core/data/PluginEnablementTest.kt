@@ -68,6 +68,31 @@ class PluginEnablementTest {
     }
 
     @Test
+    fun testChangedSignerDisablesEnabledPlugin() {
+        val plugin = descriptor("org.example.plugin", PluginOrigin.Downstream)
+        val state = PluginEnablement.resolve(
+            listOf(plugin),
+            enabled = setOf(plugin.packageName),
+            known = setOf(plugin.packageName),
+            blocked = setOf(plugin.packageName)
+        )
+        assertFalse(plugin.packageName in state.enabled)
+        assertTrue(plugin.packageName in state.known)
+    }
+
+    @Test
+    fun testChangedSignerIsNotAutoEnabled() {
+        val plugin = descriptor("org.example.plugin", PluginOrigin.Official)
+        val state = PluginEnablement.resolve(
+            listOf(plugin),
+            enabled = emptySet(),
+            known = setOf(plugin.packageName),
+            blocked = setOf(plugin.packageName)
+        )
+        assertFalse(plugin.packageName in state.enabled)
+    }
+
+    @Test
     fun testToggleTakesEffectByPackageName() {
         val first = descriptor("org.example.first", PluginOrigin.ThirdParty)
         val second = descriptor("org.example.second", PluginOrigin.ThirdParty)

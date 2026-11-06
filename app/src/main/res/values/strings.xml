@@ -221,6 +221,11 @@
     <string name="plugins_failed">Load failed</string>
     <string name="plugin_signature">Signer: %1$s</string>
     <string name="plugin_signature_unknown">Signer: unknown</string>
+    <string name="plugin_signature_none">unknown signer</string>
+    <string name="plugin_signature_changed">Signer changed (previously %1$s); disabled pending re-approval</string>
+    <string name="plugin_signature_change_title">Plugin signature changed</string>
+    <string name="plugin_signature_change_message">Package %1$s was previously approved with signer %2$s, but the installed APK now reports %3$s. Previous trust is revoked and the plugin stays disabled unless you approve the new signer.</string>
+    <string name="plugin_signature_change_confirm">Trust and enable</string>
     <string name="plugin_capability_internet">Requests INTERNET permission</string>
     <string name="plugin_capability_ipc">Declares IPC service</string>
     <string name="plugin_disabled">Disabled</string>
