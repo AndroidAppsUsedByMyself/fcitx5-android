@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Catppuccin Latte, the light flavour.
+
+        The literal palette values live in this file (and values-night for Mocha) while
+        meanings are assigned below, so a future Frappe/Macchiato flavour only has to
+        provide another set of the same semantic names.
+    -->
+    <color name="cp_background">#eff1f5</color><!-- Base -->
+    <color name="cp_surface">#ccd0da</color><!-- Surface0 -->
+    <color name="cp_surface_border">#bcc0cc</color><!-- Surface1 -->
+    <color name="cp_input_background">#eff1f5</color><!-- Base -->
+    <color name="cp_input_border">#acb0be</color><!-- Surface2 -->
+    <color name="cp_button">#eff1f5</color><!-- Base -->
+    <color name="cp_button_pressed">#dce0e8</color><!-- Crust -->
+    <color name="cp_text">#4c4f69</color><!-- Text -->
+    <color name="cp_text_secondary">#5c5f77</color><!-- Subtext1 -->
+    <color name="cp_text_disabled">#7c7f93</color><!-- Overlay2 -->
+    <color name="cp_accent">#8839ef</color><!-- Mauve -->
+    <color name="cp_on_accent">#eff1f5</color><!-- Base -->
+    <color name="cp_switch_thumb_off">#5c5f77</color><!-- Subtext1 -->
+    <color name="cp_switch_track_off">#acb0be</color><!-- Surface2 -->
+    <color name="cp_ripple">#338c8fa1</color><!-- Overlay1 at 20% -->
+    <color name="cp_ripple_on_accent">#33eff1f5</color><!-- Base at 20% -->
+</resources>

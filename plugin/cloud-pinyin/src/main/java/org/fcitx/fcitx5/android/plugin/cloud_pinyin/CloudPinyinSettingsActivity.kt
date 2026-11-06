@@ -11,7 +11,9 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.Window
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -29,6 +31,8 @@ import java.util.UUID
 class CloudPinyinSettingsActivity : Activity() {
 
     private lateinit var content: LinearLayout
+
+    private val palette by lazy { CatppuccinPalette(this) }
 
     private val credentialStore by lazy { KeystoreProxyCredentialStore(this) }
 
@@ -72,6 +76,7 @@ class CloudPinyinSettingsActivity : Activity() {
         content.addView(Switch(this).apply {
             text = getString(R.string.settings_fallback_title)
             isChecked = snapshot.fallbackEnabled
+            setTextColor(palette.text)
             setPadding(0, dp(8), 0, dp(4))
             setOnCheckedChangeListener { _, checked ->
                 CloudPinyinSettings.setFallback(this@CloudPinyinSettingsActivity, checked)
@@ -88,7 +93,14 @@ class CloudPinyinSettingsActivity : Activity() {
     ): View {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(8), 0, dp(8))
+            setBackgroundResource(R.drawable.cp_row_background)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(8)
+            }
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -100,6 +112,7 @@ class CloudPinyinSettingsActivity : Activity() {
             addView(TextView(this@CloudPinyinSettingsActivity).apply {
                 text = getString(entry.provider.labelRes)
                 setTypeface(Typeface.DEFAULT_BOLD)
+                setTextColor(palette.text)
             })
             val subtitle = if (entry.provider == CloudPinyinProvider.Custom) {
                 entry.customUrl
@@ -110,7 +123,7 @@ class CloudPinyinSettingsActivity : Activity() {
                 addView(TextView(this@CloudPinyinSettingsActivity).apply {
                     text = it
                     textSize = 12f
-                    alpha = 0.7f
+                    setTextColor(palette.textSecondary)
                 })
             }
         }
@@ -145,7 +158,7 @@ class CloudPinyinSettingsActivity : Activity() {
         outer.addView(TextView(this).apply {
             text = proxySummary(entry)
             textSize = 12f
-            alpha = 0.7f
+            setTextColor(palette.textSecondary)
             setPadding(0, dp(2), 0, 0)
         })
         return outer
@@ -162,9 +175,18 @@ class CloudPinyinSettingsActivity : Activity() {
     private fun showAddProviderDialog(existing: List<ProviderEntry>) {
         val providers = CloudPinyinProvider.entries
         val labels = providers.map { getString(it.labelRes) }.toTypedArray()
+        val adapter = object :
+            ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, labels) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return (super.getView(position, convertView, parent) as TextView).apply {
+                    setTextColor(palette.text)
+                    setPadding(dp(24), dp(14), dp(24), dp(14))
+                }
+            }
+        }
         AlertDialog.Builder(this)
             .setTitle(R.string.settings_add_provider)
-            .setItems(labels) { _, which ->
+            .setAdapter(adapter) { _, which ->
                 val provider = providers[which]
                 if (provider == CloudPinyinProvider.Custom) {
                     showCustomUrlDialog(null) { url ->
@@ -185,7 +207,7 @@ class CloudPinyinSettingsActivity : Activity() {
                         )
                         render()
                     }
-                    return@setItems
+                    return@setAdapter
                 }
                 if (existing.any { it.provider == provider }) {
                     Toast.makeText(
@@ -193,7 +215,7 @@ class CloudPinyinSettingsActivity : Activity() {
                         R.string.settings_provider_duplicate,
                         Toast.LENGTH_SHORT
                     ).show()
-                    return@setItems
+                    return@setAdapter
                 }
                 CloudPinyinSettings.setProviders(this, existing + ProviderEntry(provider))
                 render()
@@ -539,12 +561,15 @@ class CloudPinyinSettingsActivity : Activity() {
             this.hint = hint
             this.inputType = inputType
             setSingleLine()
-            setPadding(0, dp(8), 0, dp(8))
+            setTextColor(palette.text)
+            setHintTextColor(palette.textSecondary)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
         }
 
     private fun heading(text: String) = TextView(this).apply {
         this.text = text
         textSize = 18f
+        setTextColor(palette.text)
         setTypeface(Typeface.DEFAULT_BOLD)
         setPadding(0, dp(12), 0, dp(4))
     }
@@ -552,13 +577,16 @@ class CloudPinyinSettingsActivity : Activity() {
     private fun body(text: String) = TextView(this).apply {
         this.text = text
         textSize = 14f
+        setTextColor(palette.textSecondary)
         setPadding(0, dp(4), 0, dp(4))
     }
 
-    private fun action(text: String, onClick: () -> Unit) = Button(this).apply {
-        this.text = text
-        setOnClickListener { onClick() }
-    }
+    private fun action(text: String, onClick: () -> Unit) =
+        Button(this, null, 0, R.style.PluginSettingsAccentButtonStyle)
+            .apply {
+                this.text = text
+                setOnClickListener { onClick() }
+            }
 
     private fun smallButton(text: String, enabled: Boolean, onClick: () -> Unit) = Button(this).apply {
         this.text = text

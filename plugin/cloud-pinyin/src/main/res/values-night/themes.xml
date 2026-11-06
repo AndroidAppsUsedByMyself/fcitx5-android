@@ -1,5 +1,84 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark counterpart, selected by the system uiMode. -->
-    <style name="PluginSettingsTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar" />
+    <!-- Catppuccin Mocha counterpart; colours come from values-night/colors.xml. -->
+    <style name="PluginSettingsTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/cp_background</item>
+        <item name="android:colorBackground">@color/cp_background</item>
+        <item name="android:colorBackgroundFloating">@color/cp_surface</item>
+        <item name="android:statusBarColor">@color/cp_background</item>
+        <item name="android:navigationBarColor">@color/cp_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:colorPrimary">@color/cp_background</item>
+        <item name="android:colorPrimaryDark">@color/cp_background</item>
+        <item name="android:colorAccent">@color/cp_accent</item>
+        <item name="android:colorControlActivated">@color/cp_accent</item>
+        <item name="android:colorControlNormal">@color/cp_text_secondary</item>
+        <item name="android:colorControlHighlight">@color/cp_ripple</item>
+        <item name="android:colorButtonNormal">@color/cp_button</item>
+        <item name="android:colorEdgeEffect">@color/cp_accent</item>
+        <item name="android:textColorPrimary">@color/cp_text</item>
+        <item name="android:textColorSecondary">@color/cp_text_secondary</item>
+        <item name="android:textColorTertiary">@color/cp_text_secondary</item>
+        <item name="android:textColorHighlight">@color/cp_ripple</item>
+        <item name="android:alertDialogTheme">@style/PluginSettingsDialogTheme</item>
+        <item name="android:buttonStyle">@style/PluginSettingsButtonStyle</item>
+        <item name="android:editTextStyle">@style/PluginSettingsEditTextStyle</item>
+        <item name="android:switchStyle">@style/PluginSettingsSwitchStyle</item>
+        <item name="android:radioButtonStyle">@style/PluginSettingsRadioButtonStyle</item>
+    </style>
+
+    <style name="PluginSettingsDialogTheme" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/cp_dialog_background</item>
+        <item name="android:colorAccent">@color/cp_accent</item>
+        <item name="android:colorBackgroundFloating">@color/cp_surface</item>
+        <item name="android:colorControlActivated">@color/cp_accent</item>
+        <item name="android:colorControlNormal">@color/cp_text_secondary</item>
+        <item name="android:colorControlHighlight">@color/cp_ripple</item>
+        <item name="android:textColorPrimary">@color/cp_text</item>
+        <item name="android:textColorSecondary">@color/cp_text_secondary</item>
+        <item name="android:textColorTertiary">@color/cp_text_secondary</item>
+        <item name="android:textColorAlertDialogListItem">@color/cp_text</item>
+        <item name="android:editTextStyle">@style/PluginSettingsEditTextStyle</item>
+        <item name="android:radioButtonStyle">@style/PluginSettingsRadioButtonStyle</item>
+    </style>
+
+    <style name="PluginSettingsButtonStyle" parent="@android:style/Widget.Material.Button">
+        <item name="android:background">@drawable/cp_button_background</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="android:textColor">@color/cp_button_text</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">48dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+    </style>
+
+    <style name="PluginSettingsAccentButtonStyle" parent="PluginSettingsButtonStyle">
+        <item name="android:background">@drawable/cp_accent_button_background</item>
+        <item name="android:textColor">@color/cp_on_accent</item>
+    </style>
+
+    <style name="PluginSettingsEditTextStyle" parent="@android:style/Widget.Material.EditText">
+        <item name="android:background">@drawable/cp_input_background</item>
+        <item name="android:backgroundTint">@null</item>
+        <item name="android:textColor">@color/cp_text</item>
+        <item name="android:textColorHint">@color/cp_text_secondary</item>
+        <item name="android:textCursorDrawable">@drawable/cp_cursor</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:minHeight">48dp</item>
+    </style>
+
+    <style name="PluginSettingsSwitchStyle" parent="@android:style/Widget.Material.CompoundButton.Switch">
+        <item name="android:thumbTint">@color/cp_switch_thumb</item>
+        <item name="android:trackTint">@color/cp_switch_track</item>
+        <item name="android:textColor">@color/cp_text</item>
+    </style>
+
+    <style name="PluginSettingsRadioButtonStyle" parent="@android:style/Widget.Material.CompoundButton.RadioButton">
+        <item name="android:buttonTint">@color/cp_radio_tint</item>
+        <item name="android:textColor">@color/cp_text</item>
+    </style>
 </resources>

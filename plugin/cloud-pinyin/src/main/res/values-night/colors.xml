@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Catppuccin Mocha, the dark flavour. Same semantic names as values/colors.xml. -->
+    <color name="cp_background">#1e1e2e</color><!-- Base -->
+    <color name="cp_surface">#313244</color><!-- Surface0 -->
+    <color name="cp_surface_border">#45475a</color><!-- Surface1 -->
+    <color name="cp_input_background">#11111b</color><!-- Crust -->
+    <color name="cp_input_border">#45475a</color><!-- Surface1 -->
+    <color name="cp_button">#45475a</color><!-- Surface1 -->
+    <color name="cp_button_pressed">#585b70</color><!-- Surface2 -->
+    <color name="cp_text">#cdd6f4</color><!-- Text -->
+    <color name="cp_text_secondary">#a6adc8</color><!-- Subtext0 -->
+    <color name="cp_text_disabled">#9399b2</color><!-- Overlay2 -->
+    <color name="cp_accent">#cba6f7</color><!-- Mauve -->
+    <color name="cp_on_accent">#1e1e2e</color><!-- Base -->
+    <color name="cp_switch_thumb_off">#9399b2</color><!-- Overlay2 -->
+    <color name="cp_switch_track_off">#585b70</color><!-- Surface2 -->
+    <color name="cp_ripple">#33cdd6f4</color><!-- Text at 20% -->
+    <color name="cp_ripple_on_accent">#331e1e2e</color><!-- Base at 20% -->
+</resources>
