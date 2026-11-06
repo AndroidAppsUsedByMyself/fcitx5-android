@@ -48,4 +48,16 @@
     <string name="settings_proxy_summary_missing">%1$s · credential unavailable</string>
     <string name="settings_proxy_summary_unsupported">%1$s · authentication unsupported</string>
     <string name="settings_proxy_summary_invalid">Invalid proxy configuration</string>
+    <string name="settings_proxy_test">Test</string>
+    <string name="settings_proxy_testing">Testing proxy and provider…</string>
+    <string name="settings_proxy_test_ok">Connected in %1$d ms</string>
+    <string name="settings_proxy_test_failed">Failed in %1$d ms: %2$s</string>
+    <string name="settings_proxy_result_auth">proxy authentication rejected</string>
+    <string name="settings_proxy_result_timeout">timed out</string>
+    <string name="settings_proxy_result_network">network error</string>
+    <string name="settings_proxy_result_config">invalid proxy or endpoint</string>
+    <string name="settings_proxy_result_credential">credential unavailable</string>
+    <string name="settings_proxy_result_unsupported">SOCKS5 authentication is not supported</string>
+    <string name="settings_proxy_result_http">HTTP error</string>
+    <string name="settings_proxy_result_other">failed</string>
 </resources>

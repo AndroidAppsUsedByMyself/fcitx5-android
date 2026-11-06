@@ -301,11 +301,15 @@ class CloudPinyinSettingsActivity : Activity() {
             alpha = 0.7f
             visibility = View.GONE
         }
+        val status = body("").apply {
+            visibility = View.GONE
+        }
         container.addView(host)
         container.addView(port)
         container.addView(username)
         container.addView(password)
         container.addView(authNote)
+        container.addView(status)
 
         val kindForId = mapOf(
             direct.id to ProxyKind.None,
@@ -333,8 +337,27 @@ class CloudPinyinSettingsActivity : Activity() {
             .setView(ScrollView(this).apply { addView(container) })
             .setPositiveButton(R.string.settings_save, null)
             .setNegativeButton(android.R.string.cancel, null)
+            .setNeutralButton(R.string.settings_proxy_test, null)
             .create()
         dialog.setOnShowListener {
+            val testButton = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
+            testButton.setOnClickListener {
+                val kind = kindForId[group.checkedRadioButtonId] ?: ProxyKind.None
+                val inputs = probeInputs(entry, kind, host, port, username, password)
+                    ?: return@setOnClickListener
+                status.visibility = View.VISIBLE
+                status.text = getString(R.string.settings_proxy_testing)
+                testButton.isEnabled = false
+                Thread {
+                    val probe = CloudPinyinHttpClient(credentialStore = credentialStore)
+                        .probe(CloudPinyinBackendRegistry.create(entry), inputs.proxy, inputs.password)
+                    runOnUiThread {
+                        testButton.isEnabled = true
+                        if (!dialog.isShowing) return@runOnUiThread
+                        status.text = probeMessage(probe)
+                    }
+                }.start()
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val kind = kindForId[group.checkedRadioButtonId] ?: ProxyKind.None
                 val updated = proxyFromFields(entry, kind, host, port, username, password)
@@ -403,11 +426,9 @@ class CloudPinyinSettingsActivity : Activity() {
             }
 
             password.isEmpty() -> {
-                if (current?.hasAuthFields == true &&
-                    current.username == username &&
-                    current.credentialId != null
-                ) {
-                    // Keep the existing encrypted password.
+                if (current?.credentialId != null) {
+                    // Blank password keeps the stored ciphertext, even if the username
+                    // was edited; only a new credential requires a password.
                     ProxyConfig(kind, host, port, username, current.credentialId)
                 } else {
                     passwordField.error = getString(R.string.settings_proxy_password_required)
@@ -430,6 +451,87 @@ class CloudPinyinSettingsActivity : Activity() {
                 }
             }
         }
+    }
+
+    private data class ProbeInputs(val proxy: ProxyConfig, val password: String?)
+
+    /**
+     * Validates the values currently in the dialog for the connectivity test, without
+     * storing anything. A typed password is tried as-is; a blank one falls back to the
+     * already stored ciphertext.
+     */
+    private fun probeInputs(
+        entry: ProviderEntry,
+        kind: ProxyKind,
+        hostField: EditText,
+        portField: EditText,
+        usernameField: EditText,
+        passwordField: EditText
+    ): ProbeInputs? {
+        if (kind == ProxyKind.None) return ProbeInputs(ProxyConfig(), null)
+        val host = hostField.text.toString().trim()
+        if (host.isEmpty()) {
+            hostField.error = getString(R.string.settings_proxy_host_required)
+            hostField.requestFocus()
+            return null
+        }
+        val port = portField.text.toString().toIntOrNull()
+        if (port == null || port !in 1..65535) {
+            portField.error = getString(R.string.settings_proxy_port_invalid)
+            portField.requestFocus()
+            return null
+        }
+        if (kind == ProxyKind.Socks5) {
+            return ProbeInputs(ProxyConfig(kind, host, port), null)
+        }
+        val username = usernameField.text.toString().trim()
+        if (':' in username) {
+            usernameField.error = getString(R.string.settings_proxy_username_invalid)
+            usernameField.requestFocus()
+            return null
+        }
+        if (username.isEmpty()) return ProbeInputs(ProxyConfig(kind, host, port), null)
+        val password = passwordField.text.toString().takeIf { it.isNotEmpty() }
+            ?: credentialStore.load(entry.proxy.credentialId.orEmpty())
+        if (password == null) {
+            passwordField.error = getString(R.string.settings_proxy_password_required)
+            passwordField.requestFocus()
+            return null
+        }
+        return ProbeInputs(
+            ProxyConfig(kind, host, port, username, entry.proxy.credentialId),
+            password
+        )
+    }
+
+    private fun probeMessage(result: ConnectivityProbeResult): String {
+        if (result.ok) {
+            return getString(R.string.settings_proxy_test_ok, result.elapsedMillis)
+        }
+        val reason = getString(probeReason(result.reason))
+        val detail = result.detail?.takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+        return getString(
+            R.string.settings_proxy_test_failed,
+            result.elapsedMillis,
+            reason + detail
+        )
+    }
+
+    private fun probeReason(reason: CloudPinyinFailure?): Int = when (reason) {
+        CloudPinyinFailure.ProxyAuth -> R.string.settings_proxy_result_auth
+        CloudPinyinFailure.ProxyTimeout, CloudPinyinFailure.Timeout ->
+            R.string.settings_proxy_result_timeout
+
+        CloudPinyinFailure.ProxyNetwork, CloudPinyinFailure.Network ->
+            R.string.settings_proxy_result_network
+
+        CloudPinyinFailure.ProxyConfigInvalid, CloudPinyinFailure.MalformedUrl,
+        CloudPinyinFailure.InsecureScheme -> R.string.settings_proxy_result_config
+
+        CloudPinyinFailure.ProxyCredentialMissing -> R.string.settings_proxy_result_credential
+        CloudPinyinFailure.ProxyAuthUnsupported -> R.string.settings_proxy_result_unsupported
+        CloudPinyinFailure.HttpStatus -> R.string.settings_proxy_result_http
+        else -> R.string.settings_proxy_result_other
     }
 
     private fun input(hint: String, inputType: Int = InputType.TYPE_CLASS_TEXT): EditText =

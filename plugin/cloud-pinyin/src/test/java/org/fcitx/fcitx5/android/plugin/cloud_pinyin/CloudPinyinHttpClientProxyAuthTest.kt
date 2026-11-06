@@ -92,4 +92,42 @@ class CloudPinyinHttpClientProxyAuthTest {
         assertTrue(observed.isNotEmpty())
         assertEquals("Basic dXNlcjpwYXNz", observed.first())
     }
+
+    @Test
+    fun probeReportsRejectedProxyAuthentication() {
+        val server = ServerSocket(0)
+        val observed = mutableListOf<String?>()
+        val worker = thread {
+            // The failed OkHttp attempt plus the raw status check used for classification.
+            repeat(2) {
+                server.accept().use { socket ->
+                    val (requestLine, authorization) = readConnectHeaders(socket)
+                    assertTrue(requestLine.startsWith("CONNECT "))
+                    observed += authorization
+                    val out = OutputStreamWriter(socket.getOutputStream(), Charsets.ISO_8859_1)
+                    out.write(
+                        "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+                            "Proxy-Authenticate: Basic realm=\"test\"\r\n\r\n"
+                    )
+                    out.flush()
+                }
+            }
+        }
+        try {
+            val proxy = ProxyConfig(
+                ProxyKind.Http, "127.0.0.1", server.localPort, "user", "id-1"
+            )
+            val client = CloudPinyinHttpClient(maxAttemptMillis = 1000, proxiedMaxAttemptMillis = 1000)
+            // The typed password is used directly, as in the settings dialog.
+            val result = client.probe(Backend(proxy), proxy, "pass")
+            assertTrue(result.ok.not())
+            assertEquals(CloudPinyinFailure.ProxyAuth, result.reason)
+            assertTrue(observed.isNotEmpty())
+            assertTrue(observed.all { it == "Basic dXNlcjpwYXNz" })
+            assertTrue(result.elapsedMillis >= 0)
+        } finally {
+            server.close()
+            worker.join(2000)
+        }
+    }
 }

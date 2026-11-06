@@ -30,9 +30,14 @@ sealed interface ProxyPlan {
 
 object ProxyPlanner {
 
+    /**
+     * [passwordOverride] is used by the settings connectivity test, which must try a
+     * password typed into the dialog before it is stored.
+     */
     fun resolve(
         config: ProxyConfig,
-        credentialStore: ProxyCredentialStore?
+        credentialStore: ProxyCredentialStore?,
+        passwordOverride: String? = null
     ): ProxyPlan {
         if (!config.enabled) return ProxyPlan.Direct
         if (!config.isValid) {
@@ -50,14 +55,16 @@ object ProxyPlanner {
                         ?: return ProxyPlan.Failure(
                             CloudPinyinFailure.ProxyCredentialMissing, "username"
                         )
-                    val credentialId = config.credentialId?.takeIf { it.isNotBlank() }
-                        ?: return ProxyPlan.Failure(
-                            CloudPinyinFailure.ProxyCredentialMissing, "credential"
-                        )
-                    val password = credentialStore?.load(credentialId)
-                        ?: return ProxyPlan.Failure(
-                            CloudPinyinFailure.ProxyCredentialMissing, "credential"
-                        )
+                    val password = passwordOverride ?: run {
+                        val credentialId = config.credentialId?.takeIf { it.isNotBlank() }
+                            ?: return ProxyPlan.Failure(
+                                CloudPinyinFailure.ProxyCredentialMissing, "credential"
+                            )
+                        credentialStore?.load(credentialId)
+                            ?: return ProxyPlan.Failure(
+                                CloudPinyinFailure.ProxyCredentialMissing, "credential"
+                            )
+                    }
                     ProxyPlan.Proxied(
                         Proxy(Proxy.Type.HTTP, address),
                         ProxyCredentials(username, password)

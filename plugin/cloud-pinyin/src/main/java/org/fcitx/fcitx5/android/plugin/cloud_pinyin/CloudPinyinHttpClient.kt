@@ -10,11 +10,15 @@ import okhttp3.ConnectionPool
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
+import java.io.InputStreamReader
 import java.io.InterruptedIOException
+import java.net.InetSocketAddress
 import java.net.Proxy
+import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.nio.ByteBuffer
@@ -47,6 +51,14 @@ fun checkEndpoint(urlString: String?): EndpointCheck {
     }
     return EndpointCheck.Valid(url)
 }
+
+/** Outcome of a settings-dialog connectivity test. */
+data class ConnectivityProbeResult(
+    val ok: Boolean,
+    val reason: CloudPinyinFailure? = null,
+    val detail: String? = null,
+    val elapsedMillis: Long
+)
 
 sealed interface BodyReadResult {
     data class Content(val bytes: ByteArray) : BodyReadResult
@@ -218,6 +230,138 @@ class CloudPinyinHttpClient(
         calls.remove(requestId)?.cancel()
     }
 
+    /**
+     * One-off connectivity check for the settings dialog.
+     *
+     * It performs the same request as a real lookup (proxy CONNECT, authentication, TLS
+     * and the provider response) with the values currently typed into the dialog. It
+     * stores nothing and its outcome never blocks saving the configuration.
+     */
+    fun probe(
+        backend: CloudPinyinBackend,
+        proxy: ProxyConfig,
+        password: String?,
+        timeoutMillis: Long = proxiedMaxAttemptMillis
+    ): ConnectivityProbeResult {
+        val started = System.currentTimeMillis()
+        fun result(
+            ok: Boolean,
+            reason: CloudPinyinFailure? = null,
+            detail: String? = null
+        ) = ConnectivityProbeResult(ok, reason, detail, System.currentTimeMillis() - started)
+
+        val endpoint = when (val check = checkEndpoint(backend.requestUrl(PROBE_PINYIN))) {
+            is EndpointCheck.Invalid -> return result(false, check.reason, check.detail)
+            is EndpointCheck.Valid -> check.url
+        }
+        val plan = ProxyPlanner.resolve(proxy, credentialStore, password)
+        if (plan is ProxyPlan.Failure) {
+            return result(false, plan.reason, plan.detail)
+        }
+        val attemptCap = if (proxy.enabled) proxiedMaxAttemptMillis else maxAttemptMillis
+        val timeout = timeoutMillis.coerceIn(1L, attemptCap)
+        val client = buildClient(proxy, plan, timeout)
+        val call = client.newCall(Request.Builder().url(endpoint).get().build())
+        val failure = try {
+            call.execute().use { response ->
+                val code = response.code
+                return when {
+                    code == 407 && proxy.enabled ->
+                        result(false, CloudPinyinFailure.ProxyAuth, code.toString())
+
+                    code !in 200..299 ->
+                        result(false, CloudPinyinFailure.HttpStatus, code.toString())
+
+                    else -> result(true, detail = code.toString())
+                }
+            }
+        } catch (e: SocketTimeoutException) {
+            CloudPinyinFailure.ProxyTimeout to e.message
+        } catch (e: InterruptedIOException) {
+            CloudPinyinFailure.ProxyTimeout to e.message
+        } catch (e: IOException) {
+            val message = e.message.orEmpty()
+            val reason = when {
+                !proxy.enabled -> CloudPinyinFailure.Network
+                "407" in message -> CloudPinyinFailure.ProxyAuth
+                "authenticate" in message.lowercase() -> CloudPinyinFailure.ProxyAuth
+                else -> CloudPinyinFailure.ProxyNetwork
+            }
+            reason to e.message
+        } catch (e: Exception) {
+            val reason = if (proxy.enabled) {
+                CloudPinyinFailure.ProxyNetwork
+            } else {
+                CloudPinyinFailure.Network
+            }
+            reason to e.message
+        } finally {
+            call.cancel()
+        }
+
+        // OkHttp reports a rejected CONNECT as a truncated tunnel instead of a 407, so
+        // ask the proxy directly to distinguish bad credentials from a broken network.
+        if (proxy.enabled && proxy.kind == ProxyKind.Http &&
+            failure.first != CloudPinyinFailure.ProxyAuth
+        ) {
+            val credentials = (plan as? ProxyPlan.Proxied)?.credentials
+            val status = credentials?.let {
+                runCatching {
+                    rawTunnelStatus(
+                        proxy,
+                        it,
+                        endpoint.host,
+                        endpointPort(endpoint),
+                        timeout
+                    )
+                }.getOrNull()
+            }
+            if (status == 407) {
+                return result(false, CloudPinyinFailure.ProxyAuth, status.toString())
+            }
+        }
+        return result(false, failure.first, failure.second)
+    }
+
+    /**
+     * Minimal CONNECT handshake used only to learn the proxy's status code. The tunnel is
+     * closed immediately; the real probe request is done by OkHttp.
+     */
+    private fun rawTunnelStatus(
+        proxy: ProxyConfig,
+        credentials: ProxyCredentials,
+        host: String,
+        port: Int,
+        timeoutMillis: Long
+    ): Int {
+        Socket().use { socket ->
+            socket.connect(
+                InetSocketAddress(proxy.host.trim(), proxy.port),
+                timeoutMillis.toInt()
+            )
+            socket.soTimeout = timeoutMillis.toInt()
+            val authorization = Credentials.basic(credentials.username, credentials.password)
+            val request = buildString {
+                append("CONNECT $host:$port HTTP/1.1\r\n")
+                append("Host: $host:$port\r\n")
+                append("Proxy-Authorization: $authorization\r\n")
+                append("\r\n")
+            }
+            socket.getOutputStream().apply {
+                write(request.toByteArray(Charsets.ISO_8859_1))
+                flush()
+            }
+            val reader = BufferedReader(
+                InputStreamReader(socket.getInputStream(), Charsets.ISO_8859_1)
+            )
+            val statusLine = reader.readLine().orEmpty()
+            return statusLine.split(' ').getOrNull(1)?.toIntOrNull()
+                ?: throw IOException("unexpected status line: $statusLine")
+        }
+    }
+
+    private fun endpointPort(url: URL): Int = if (url.port > 0) url.port else 443
+
     private fun buildClient(
         proxyConfig: ProxyConfig,
         plan: ProxyPlan,
@@ -320,5 +464,8 @@ class CloudPinyinHttpClient(
 
     private companion object {
         const val TAG = "CloudPinyin"
+
+        /** Input used by the connectivity test; long enough to pass the provider minimum. */
+        const val PROBE_PINYIN = "nihao"
     }
 }

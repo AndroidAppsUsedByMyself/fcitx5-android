@@ -48,4 +48,16 @@
     <string name="settings_proxy_summary_missing">%1$s · 凭据不可用</string>
     <string name="settings_proxy_summary_unsupported">%1$s · 暂不支持鉴权</string>
     <string name="settings_proxy_summary_invalid">代理配置无效</string>
+    <string name="settings_proxy_test">测试</string>
+    <string name="settings_proxy_testing">正在测试代理与供应商…</string>
+    <string name="settings_proxy_test_ok">连接成功，耗时 %1$d ms</string>
+    <string name="settings_proxy_test_failed">连接失败，耗时 %1$d ms：%2$s</string>
+    <string name="settings_proxy_result_auth">代理鉴权被拒绝</string>
+    <string name="settings_proxy_result_timeout">超时</string>
+    <string name="settings_proxy_result_network">网络错误</string>
+    <string name="settings_proxy_result_config">代理或接口地址无效</string>
+    <string name="settings_proxy_result_credential">凭据不可用</string>
+    <string name="settings_proxy_result_unsupported">不支持 SOCKS5 鉴权</string>
+    <string name="settings_proxy_result_http">HTTP 错误</string>
+    <string name="settings_proxy_result_other">失败</string>
 </resources>
