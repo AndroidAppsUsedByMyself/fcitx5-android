@@ -19,24 +19,27 @@ import javax.xml.validation.SchemaFactory
 class AndroidPluginAppConventionPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
+        // Must match the host's applicationId, including the APP_ID override.
+        val appIdBase = target.findProperty("APP_ID") as String? ?: "org.fcitx.fcitx5.android"
         target.extensions.configure<ApplicationExtension> {
             buildFeatures {
                 buildConfig = true
             }
             buildTypes {
                 release {
-                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"org.fcitx.fcitx5.android\"")
+                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"$appIdBase\"")
                     addManifestPlaceholders(
                         mapOf(
-                            "mainApplicationId" to "org.fcitx.fcitx5.android",
+                            "mainApplicationId" to appIdBase,
                         )
                     )
                 }
                 debug {
-                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"org.fcitx.fcitx5.android.debug\"")
+                    val debugAppId = "$appIdBase.debug"
+                    buildConfigField("String", "MAIN_APPLICATION_ID", "\"$debugAppId\"")
                     addManifestPlaceholders(
                         mapOf(
-                            "mainApplicationId" to "org.fcitx.fcitx5.android.debug",
+                            "mainApplicationId" to debugAppId,
                         )
                     )
                 }

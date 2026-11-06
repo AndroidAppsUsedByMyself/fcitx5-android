@@ -13,7 +13,8 @@ android {
     namespace = "org.fcitx.fcitx5.android"
 
     defaultConfig {
-        applicationId = "org.fcitx.fcitx5.android"
+        // Local override for downstream builds; defaults to the upstream application id.
+        applicationId = project.findProperty("APP_ID") as String? ?: "org.fcitx.fcitx5.android"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         @Suppress("UnstableApiUsage")

@@ -6,6 +6,8 @@ plugins {
     id("org.fcitx.fcitx5.android.fcitx-component")
 }
 
+val hostAppId: String = project.findProperty("APP_ID") as String? ?: "org.fcitx.fcitx5.android"
+
 android {
     namespace = "org.fcitx.fcitx5.android.plugin.cloud_pinyin"
 
@@ -34,15 +36,11 @@ android {
     buildTypes {
         release {
             resValue("string", "app_name", "@string/app_name_release")
-            resValue("string", "ipc_service_action", "org.fcitx.fcitx5.android.plugin.SERVICE")
+            resValue("string", "ipc_service_action", "$hostAppId.plugin.SERVICE")
         }
         debug {
             resValue("string", "app_name", "@string/app_name_debug")
-            resValue(
-                "string",
-                "ipc_service_action",
-                "org.fcitx.fcitx5.android.debug.plugin.SERVICE"
-            )
+            resValue("string", "ipc_service_action", "$hostAppId.debug.plugin.SERVICE")
         }
     }
 
