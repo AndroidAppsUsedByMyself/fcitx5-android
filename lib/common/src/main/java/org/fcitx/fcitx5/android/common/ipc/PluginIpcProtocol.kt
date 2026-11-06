@@ -19,9 +19,11 @@ object PluginIpcProtocol {
     const val MAX_VERSION = 1
 
     /**
-     * Must stay below the 1s placeholder threshold in the upstream pinyin engine.
+     * Must exceed the cloud pinyin client budget (4s) so a slow proxy request can still
+     * report its result instead of being dropped by the host. The pinyin engine no
+     * longer keeps failed placeholders after the old 1s threshold.
      */
-    const val TIMEOUT_MILLIS = 900L
+    const val TIMEOUT_MILLIS = 5000L
 
     const val SERVICE_ACTION_SUFFIX = ".plugin.SERVICE"
 }

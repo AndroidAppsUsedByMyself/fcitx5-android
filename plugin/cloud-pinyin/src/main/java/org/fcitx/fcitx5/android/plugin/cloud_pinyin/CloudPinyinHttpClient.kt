@@ -77,12 +77,15 @@ fun decodeUtf8(bytes: ByteArray): String? = runCatching {
  */
 class CloudPinyinHttpClient(
     private val maxBytes: Int = 4 * 1024,
-    private val maxAttemptMillis: Long = 700L,
+    /** Direct requests measured at 108-377ms; 1s leaves room for cold TLS. */
+    private val maxAttemptMillis: Long = 1000L,
     /**
-     * Proxied requests get extra headroom for the proxy TCP handshake, CONNECT and the
-     * additional TLS round trip. Direct requests keep the original budget.
+     * Proxied requests add a proxy TCP handshake, CONNECT/407 negotiation and TLS.
+     * Measured: SOCKS5 cold start 1085ms; HTTP CONNECT on the same LAN 0.9-1.4s with
+     * occasional 2.05s spikes that the previous 2s cap cut off. 3s covers the worst
+     * observed attempt with margin while still failing fast on a dead proxy.
      */
-    private val proxiedMaxAttemptMillis: Long = 1200L,
+    private val proxiedMaxAttemptMillis: Long = 3000L,
     private val credentialStore: ProxyCredentialStore? = null
 ) {
 

@@ -40,7 +40,11 @@ class CloudPinyinRepository(
     ) -> CloudPinyinFetchResult,
     private val cache: CloudPinyinCache = CloudPinyinCache(),
     private val backoff: CloudPinyinBackoff = CloudPinyinBackoff(),
-    private val timeoutMillis: Long = 2000L,
+    /**
+     * Whole fallback chain budget: one direct attempt (1s) plus one proxied attempt
+     * (3s). The host IPC timeout is 5s, so the final result is not dropped.
+     */
+    private val timeoutMillis: Long = 4000L,
     maxConcurrent: Int = 3,
     private val disconnect: (Long) -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis
