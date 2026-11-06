@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -149,5 +150,93 @@ class ProviderListCodecTest {
             emptyList<ProviderEntry>(),
             ProviderListCodec.decode("custom\t")
         )
+    }
+
+    @Test
+    fun testProxyRoundTrip() {
+        val entries = listOf(
+            ProviderEntry(
+                CloudPinyinProvider.GoogleCn,
+                proxy = ProxyConfig(
+                    ProxyKind.Http, "proxy.example.com", 8080, "user", "cred-1"
+                )
+            ),
+            ProviderEntry(
+                CloudPinyinProvider.Baidu,
+                proxy = ProxyConfig(ProxyKind.Socks5, "127.0.0.1", 1080)
+            ),
+            ProviderEntry(
+                CloudPinyinProvider.Custom,
+                "https://example.com/cloud?a=1&b=2",
+                ProxyConfig()
+            )
+        )
+        assertEquals(entries, ProviderListCodec.decode(ProviderListCodec.encode(entries)))
+    }
+
+    @Test
+    fun testSocksAuthFieldsSurviveRoundTrip() {
+        val entry = ProviderEntry(
+            CloudPinyinProvider.GoogleCn,
+            proxy = ProxyConfig(
+                ProxyKind.Socks5, "proxy.example.com", 1080, "user", "cred-2"
+            )
+        )
+        assertEquals(
+            listOf(entry),
+            ProviderListCodec.decode(ProviderListCodec.encode(listOf(entry)))
+        )
+    }
+
+    @Test
+    fun testInvalidProxyPortSurvivesRoundTrip() {
+        val entry = ProviderEntry(
+            CloudPinyinProvider.GoogleCn,
+            proxy = ProxyConfig(ProxyKind.Http, "proxy.example.com", 0)
+        )
+        assertEquals(
+            listOf(entry),
+            ProviderListCodec.decode(ProviderListCodec.encode(listOf(entry)))
+        )
+    }
+
+    @Test
+    fun testUnknownProxyKindDecodesDirect() {
+        val decoded = ProviderListCodec.decode("google\t\tsocks6\tproxy\t1080")
+        assertEquals(
+            listOf(ProviderEntry(CloudPinyinProvider.Google)),
+            decoded
+        )
+    }
+}
+
+class ProxyConfigTest {
+
+    @Test
+    fun testBackendKeyIncludesProxyIdentity() {
+        val direct = GoogleCnBackend()
+        val proxied = GoogleCnBackend(
+            ProxyConfig(ProxyKind.Http, "proxy.example.com", 8080, "user", "cred")
+        )
+        assertNotEquals(direct.key, proxied.key)
+    }
+
+    @Test
+    fun testIdentityDoesNotContainUsernameOrPassword() {
+        val config = ProxyConfig(
+            ProxyKind.Http, "proxy.example.com", 8080, "user", "cred"
+        )
+        assertTrue("user" !in config.identity)
+        assertTrue("cred" in config.identity)
+    }
+
+    @Test
+    fun testValidation() {
+        assertTrue(ProxyConfig().isValid)
+        assertTrue(ProxyConfig(ProxyKind.Http, "host", 1).isValid)
+        assertTrue(ProxyConfig(ProxyKind.Http, "host", 65535).isValid)
+        assertTrue(!ProxyConfig(ProxyKind.Http, "", 8080).isValid)
+        assertTrue(!ProxyConfig(ProxyKind.Http, "host", 0).isValid)
+        assertTrue(!ProxyConfig(ProxyKind.Http, "host", 65536).isValid)
     }
 }

@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CloudPinyinRepositoryTest {
@@ -239,5 +240,26 @@ class CloudPinyinRepositoryTest {
         }
         assertEquals("候选-b", repo.query("nihao", 1))
         assertEquals(listOf("b"), calls)
+    }
+
+    @Test
+    fun testSettingsChangeClearsCacheAndBackoff() = runBlocking {
+        var calls = 0
+        val backoff = CloudPinyinBackoff()
+        val repo = repository(this, backoff = backoff) { _, _, _, _ ->
+            calls += 1
+            CloudPinyinFetchResult.Success("候选")
+        }
+        assertEquals("候选", repo.query("nihao", 1))
+        assertEquals("候选", repo.query("nihao", 2))
+        assertEquals(1, calls)
+
+        repeat(3) { backoff.recordFailure("a") }
+        assertTrue(backoff.isCoolingDown("a"))
+
+        repo.onSettingsChanged()
+        assertTrue(!backoff.isCoolingDown("a"))
+        assertEquals("候选", repo.query("nihao", 3))
+        assertEquals(2, calls)
     }
 }

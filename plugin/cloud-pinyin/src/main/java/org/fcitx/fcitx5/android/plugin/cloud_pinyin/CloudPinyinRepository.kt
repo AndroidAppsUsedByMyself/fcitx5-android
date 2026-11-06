@@ -40,7 +40,7 @@ class CloudPinyinRepository(
     ) -> CloudPinyinFetchResult,
     private val cache: CloudPinyinCache = CloudPinyinCache(),
     private val backoff: CloudPinyinBackoff = CloudPinyinBackoff(),
-    private val timeoutMillis: Long = 900L,
+    private val timeoutMillis: Long = 2000L,
     maxConcurrent: Int = 3,
     private val disconnect: (Long) -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis
@@ -87,6 +87,15 @@ class CloudPinyinRepository(
                 }
             }
         }
+    }
+
+    /**
+     * Called when the provider list changes. Proxy identities are part of backend keys,
+     * so this clears results and cooldowns that belonged to the previous configuration.
+     */
+    fun onSettingsChanged() {
+        cache.clear()
+        backoff.clear()
     }
 
     /**

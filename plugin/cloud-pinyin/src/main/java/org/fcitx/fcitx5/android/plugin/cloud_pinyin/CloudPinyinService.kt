@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import android.app.Service
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.IBinder
@@ -30,7 +31,11 @@ class CloudPinyinService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val httpClient = CloudPinyinHttpClient()
+    private val credentialStore by lazy { KeystoreProxyCredentialStore(this) }
+
+    private val httpClient by lazy {
+        CloudPinyinHttpClient(credentialStore = credentialStore)
+    }
 
     private val repository by lazy {
         CloudPinyinRepository(
@@ -48,6 +53,18 @@ class CloudPinyinService : Service() {
             },
             disconnect = httpClient::disconnect
         )
+    }
+
+    private val settingsListener =
+        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == CloudPinyinSettings.KEY_PROVIDERS) {
+                repository.onSettingsChanged()
+            }
+        }
+
+    override fun onCreate() {
+        super.onCreate()
+        CloudPinyinSettings.registerListener(this, settingsListener)
     }
 
     private val jobs = ConcurrentHashMap<Long, Job>()
@@ -122,6 +139,7 @@ class CloudPinyinService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     override fun onDestroy() {
+        CloudPinyinSettings.unregisterListener(this, settingsListener)
         scope.cancel()
         super.onDestroy()
     }

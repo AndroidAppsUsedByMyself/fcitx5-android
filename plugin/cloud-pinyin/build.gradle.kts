@@ -11,6 +11,10 @@ val hostAppId: String = project.findProperty("APP_ID") as String? ?: "org.fcitx.
 android {
     namespace = "org.fcitx.fcitx5.android.plugin.cloud_pinyin"
 
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+
     // Ship the license and NOTICE inside the APK; they are also kept as source files.
     sourceSets {
         getByName("main").assets.srcDir("LICENSES")
@@ -58,5 +62,6 @@ dependencies {
     implementation(project(":lib:fcitx5"))
     implementation(project(":lib:plugin-base"))
     implementation(libs.kotlinx.coroutines)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
 }

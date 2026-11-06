@@ -11,10 +11,11 @@ import java.net.URLEncoder
  */
 open class GoogleInputToolsBackend(
     override val id: String,
-    private val baseUrl: String
+    private val baseUrl: String,
+    override val proxy: ProxyConfig = ProxyConfig()
 ) : CloudPinyinBackend {
 
-    override val key: String get() = id
+    override val key: String get() = "$id|${proxy.identity}"
 
     override fun requestUrl(pinyin: String): String {
         val encoded = URLEncoder.encode(pinyin, Charsets.UTF_8.name())

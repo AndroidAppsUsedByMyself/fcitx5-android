@@ -7,7 +7,10 @@ package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 /**
  * Google inputtools via the mainland-facing google.cn host. Recommended default.
  */
-class GoogleCnBackend : GoogleInputToolsBackend(
+class GoogleCnBackend(
+    proxy: ProxyConfig = ProxyConfig()
+) : GoogleInputToolsBackend(
     id = CloudPinyinProvider.GoogleCn.id,
-    baseUrl = "https://www.google.cn/inputtools/request?ime=pinyin&text="
+    baseUrl = "https://www.google.cn/inputtools/request?ime=pinyin&text=",
+    proxy = proxy
 )

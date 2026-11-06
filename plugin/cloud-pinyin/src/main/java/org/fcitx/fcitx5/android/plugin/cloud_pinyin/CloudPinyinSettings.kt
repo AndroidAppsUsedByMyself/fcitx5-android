@@ -19,7 +19,7 @@ data class CloudPinyinSettingsSnapshot(
 object CloudPinyinSettings {
 
     private const val PREFS = "cloud_pinyin"
-    private const val KEY_PROVIDERS = "providers"
+    const val KEY_PROVIDERS = "providers"
     private const val KEY_FALLBACK = "fallback"
     private const val KEY_LEGACY_BACKEND = "backend"
 
@@ -49,6 +49,20 @@ object CloudPinyinSettings {
 
     fun setFallback(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_FALLBACK, enabled).apply()
+    }
+
+    internal fun registerListener(
+        context: Context,
+        listener: SharedPreferences.OnSharedPreferenceChangeListener
+    ) {
+        prefs(context).registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    internal fun unregisterListener(
+        context: Context,
+        listener: SharedPreferences.OnSharedPreferenceChangeListener
+    ) {
+        prefs(context).unregisterOnSharedPreferenceChangeListener(listener)
     }
 
     private fun prefs(context: Context): SharedPreferences =

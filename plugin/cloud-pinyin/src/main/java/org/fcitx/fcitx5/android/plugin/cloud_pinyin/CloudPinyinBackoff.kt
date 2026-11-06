@@ -34,6 +34,11 @@ class CloudPinyinBackoff(
         states.remove(key)
     }
 
+    @Synchronized
+    fun clear() {
+        states.clear()
+    }
+
     private fun delayFor(failures: Int): Long = when {
         failures >= 5 -> 300_000L
         failures == 4 -> 120_000L

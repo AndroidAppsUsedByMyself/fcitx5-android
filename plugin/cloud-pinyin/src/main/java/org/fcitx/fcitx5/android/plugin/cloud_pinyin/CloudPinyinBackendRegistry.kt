@@ -10,11 +10,11 @@ package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 object CloudPinyinBackendRegistry {
 
     fun create(entry: ProviderEntry): CloudPinyinBackend = when (entry.provider) {
-        CloudPinyinProvider.GoogleCn -> GoogleCnBackend()
-        CloudPinyinProvider.Google -> GoogleBackend()
-        CloudPinyinProvider.Baidu -> BaiduBackend()
+        CloudPinyinProvider.GoogleCn -> GoogleCnBackend(entry.proxy)
+        CloudPinyinProvider.Google -> GoogleBackend(entry.proxy)
+        CloudPinyinProvider.Baidu -> BaiduBackend(entry.proxy)
         // Keep invalid URLs in the pipeline so they fail explicitly and are logged.
-        CloudPinyinProvider.Custom -> CustomEndpointBackend(entry.customUrl.orEmpty())
+        CloudPinyinProvider.Custom -> CustomEndpointBackend(entry.customUrl.orEmpty(), entry.proxy)
     }
 
     fun createAll(entries: List<ProviderEntry>): List<CloudPinyinBackend> =

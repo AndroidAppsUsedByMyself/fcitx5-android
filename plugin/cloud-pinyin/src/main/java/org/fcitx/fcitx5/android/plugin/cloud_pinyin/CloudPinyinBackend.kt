@@ -26,7 +26,13 @@ enum class CloudPinyinFailure {
     Parse,
     EmptyCandidates,
     Timeout,
-    Network
+    Network,
+    ProxyConfigInvalid,
+    ProxyCredentialMissing,
+    ProxyAuthUnsupported,
+    ProxyAuth,
+    ProxyTimeout,
+    ProxyNetwork
 }
 
 sealed interface CloudPinyinParseResult {
@@ -42,6 +48,11 @@ sealed interface CloudPinyinParseResult {
  * [CloudPinyinBackendRegistry].
  */
 interface CloudPinyinBackend {
+    /**
+     * Proxy configured for this provider entry. Defaults to an explicit direct connection.
+     */
+    val proxy: ProxyConfig get() = ProxyConfig()
+
     /**
      * Stable identity used for the result cache and per-endpoint backoff. For custom
      * endpoints this includes the configured URL, so it must never be logged.

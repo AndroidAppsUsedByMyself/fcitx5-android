@@ -32,5 +32,9 @@ class CloudPinyinCache(
         entries[key] = Entry(value, clock())
     }
 
+    fun clear() {
+        entries.clear()
+    }
+
     fun size(): Int = entries.size
 }

@@ -25,5 +25,6 @@ enum class CloudPinyinProvider(
 
 data class ProviderEntry(
     val provider: CloudPinyinProvider,
-    val customUrl: String? = null
+    val customUrl: String? = null,
+    val proxy: ProxyConfig = ProxyConfig()
 )

@@ -9,11 +9,13 @@ import java.net.URLEncoder
 /**
  * Baidu olime endpoint.
  */
-class BaiduBackend : CloudPinyinBackend {
+class BaiduBackend(
+    override val proxy: ProxyConfig = ProxyConfig()
+) : CloudPinyinBackend {
 
     override val id: String get() = CloudPinyinProvider.Baidu.id
 
-    override val key: String get() = id
+    override val key: String get() = "$id|${proxy.identity}"
 
     override fun requestUrl(pinyin: String): String {
         val encoded = URLEncoder.encode(pinyin, Charsets.UTF_8.name())

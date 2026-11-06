@@ -5,14 +5,22 @@
 package org.fcitx.fcitx5.android.plugin.cloud_pinyin
 
 import android.util.Log
+import okhttp3.Call
+import okhttp3.ConnectionPool
+import okhttp3.Credentials
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import java.io.InputStream
-import java.net.HttpURLConnection
+import java.io.InterruptedIOException
+import java.net.Proxy
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 
 sealed interface EndpointCheck {
     data class Valid(val url: URL) : EndpointCheck
@@ -61,13 +69,24 @@ fun decodeUtf8(bytes: ByteArray): String? = runCatching {
 
 /**
  * HTTPS-only fetcher with strict timeouts and a hard response size limit.
+ *
+ * Each request gets its own OkHttp client (and an empty connection pool) so credentials
+ * for one provider's proxy can never be reused for another provider that happens to
+ * share the same proxy address. [OkHttpClient.callTimeout] bounds the whole attempt:
+ * DNS, TCP CONNECT, proxy 407 negotiation, TLS and the response body read.
  */
 class CloudPinyinHttpClient(
     private val maxBytes: Int = 4 * 1024,
-    private val maxAttemptMillis: Long = 700L
+    private val maxAttemptMillis: Long = 700L,
+    /**
+     * Proxied requests get extra headroom for the proxy TCP handshake, CONNECT and the
+     * additional TLS round trip. Direct requests keep the original budget.
+     */
+    private val proxiedMaxAttemptMillis: Long = 1200L,
+    private val credentialStore: ProxyCredentialStore? = null
 ) {
 
-    private val connections = ConcurrentHashMap<Long, HttpURLConnection>()
+    private val calls = ConcurrentHashMap<Long, Call>()
 
     fun fetch(
         backend: CloudPinyinBackend,
@@ -82,73 +101,164 @@ class CloudPinyinHttpClient(
 
             is EndpointCheck.Valid -> check.url
         }
-        val timeout = timeoutMillis.coerceIn(1L, maxAttemptMillis)
-        var connection: HttpURLConnection? = null
+        val plan = ProxyPlanner.resolve(backend.proxy, credentialStore)
+        if (plan is ProxyPlan.Failure) {
+            logFailure(backend, requestId, started, plan.reason, plan.detail, null)
+            return CloudPinyinFetchResult.Failure(plan.reason, plan.detail)
+        }
+        val attemptCap = if (backend.proxy.enabled) {
+            proxiedMaxAttemptMillis
+        } else {
+            maxAttemptMillis
+        }
+        val timeout = timeoutMillis.coerceIn(1L, attemptCap)
+        val client = buildClient(backend.proxy, plan, timeout)
+        val call = client.newCall(
+            Request.Builder().url(endpoint).get().build()
+        )
+        calls[requestId] = call
         return try {
-            connection = (endpoint.openConnection() as HttpURLConnection).apply {
-                connectTimeout = timeout.toInt()
-                readTimeout = timeout.toInt()
-                instanceFollowRedirects = false
-                useCaches = false
-                requestMethod = "GET"
-            }
-            connections[requestId] = connection
-            val code = connection.responseCode
-            if (code !in 200..299) {
-                return fail(
-                    backend, requestId, started,
-                    CloudPinyinFailure.HttpStatus, code.toString()
-                )
-            }
-            val body = connection.inputStream.use {
-                readBody(it, deadlineMillis = started + timeout)
-            }
-            val reason = when (body) {
-                BodyReadResult.Empty -> CloudPinyinFailure.EmptyBody
-                BodyReadResult.Oversize -> CloudPinyinFailure.Oversize
-                BodyReadResult.Timeout -> CloudPinyinFailure.Timeout
-                is BodyReadResult.Content -> null
-            }
-            if (reason != null) {
-                return fail(backend, requestId, started, reason)
-            }
-            val text = decodeUtf8((body as BodyReadResult.Content).bytes)
-                ?: return fail(backend, requestId, started, CloudPinyinFailure.InvalidUtf8)
-
-            when (val parsed = backend.parse(text)) {
-                is CloudPinyinParseResult.Candidate -> {
-                    Log.d(
-                        TAG,
-                        "provider=${backend.id} request=$requestId status=$code candidate=ok " +
-                            "elapsed=${System.currentTimeMillis() - started}"
-                    )
-                    CloudPinyinFetchResult.Success(parsed.value)
-                }
-
-                is CloudPinyinParseResult.Failure -> {
-                    logFailure(
+            call.execute().use { response ->
+                val code = response.code
+                if (code == 407 && backend.proxy.enabled) {
+                    return fail(
                         backend, requestId, started,
-                        parsed.reason, parsed.detail, code
+                        CloudPinyinFailure.ProxyAuth, code.toString()
                     )
-                    CloudPinyinFetchResult.Failure(parsed.reason, parsed.detail)
+                }
+                if (code !in 200..299) {
+                    return fail(
+                        backend, requestId, started,
+                        CloudPinyinFailure.HttpStatus, code.toString()
+                    )
+                }
+                val responseBody = response.body
+                    ?: return fail(
+                        backend, requestId, started,
+                        CloudPinyinFailure.EmptyBody
+                    )
+                val body = responseBody.byteStream().use {
+                    readBody(it, deadlineMillis = started + timeout)
+                }
+                val reason = when (body) {
+                    BodyReadResult.Empty -> CloudPinyinFailure.EmptyBody
+                    BodyReadResult.Oversize -> CloudPinyinFailure.Oversize
+                    BodyReadResult.Timeout -> CloudPinyinFailure.Timeout
+                    is BodyReadResult.Content -> null
+                }
+                if (reason != null) {
+                    return fail(backend, requestId, started, reason)
+                }
+                val text = decodeUtf8((body as BodyReadResult.Content).bytes)
+                    ?: return fail(
+                        backend, requestId, started,
+                        CloudPinyinFailure.InvalidUtf8
+                    )
+
+                when (val parsed = backend.parse(text)) {
+                    is CloudPinyinParseResult.Candidate -> {
+                        Log.d(
+                            TAG,
+                            "provider=${backend.id} proxy=${backend.proxy.logLabel} " +
+                                "request=$requestId status=$code candidate=ok " +
+                                "elapsed=${System.currentTimeMillis() - started}"
+                        )
+                        CloudPinyinFetchResult.Success(parsed.value)
+                    }
+
+                    is CloudPinyinParseResult.Failure -> {
+                        logFailure(
+                            backend, requestId, started,
+                            parsed.reason, parsed.detail, code
+                        )
+                        CloudPinyinFetchResult.Failure(parsed.reason, parsed.detail)
+                    }
                 }
             }
         } catch (e: SocketTimeoutException) {
-            fail(backend, requestId, started, CloudPinyinFailure.Timeout, e.javaClass.simpleName)
+            val reason = if (backend.proxy.enabled) {
+                CloudPinyinFailure.ProxyTimeout
+            } else {
+                CloudPinyinFailure.Timeout
+            }
+            fail(backend, requestId, started, reason, e.javaClass.simpleName)
+        } catch (e: InterruptedIOException) {
+            val reason = if (backend.proxy.enabled) {
+                CloudPinyinFailure.ProxyTimeout
+            } else {
+                CloudPinyinFailure.Timeout
+            }
+            fail(backend, requestId, started, reason, e.javaClass.simpleName)
+        } catch (e: IOException) {
+            val message = e.message.orEmpty()
+            val reason = when {
+                !backend.proxy.enabled -> CloudPinyinFailure.Network
+                "407" in message -> CloudPinyinFailure.ProxyAuth
+                "authenticate" in message.lowercase() -> CloudPinyinFailure.ProxyAuth
+                else -> CloudPinyinFailure.ProxyNetwork
+            }
+            fail(backend, requestId, started, reason, e.javaClass.simpleName)
         } catch (e: Exception) {
-            fail(
-                backend, requestId, started,
-                CloudPinyinFailure.Network, e.javaClass.simpleName
-            )
+            val reason = if (backend.proxy.enabled) {
+                CloudPinyinFailure.ProxyNetwork
+            } else {
+                CloudPinyinFailure.Network
+            }
+            fail(backend, requestId, started, reason, e.javaClass.simpleName)
         } finally {
-            connections.remove(requestId)
-            runCatching { connection?.disconnect() }
+            calls.remove(requestId)
+            call.cancel()
         }
     }
 
     fun disconnect(requestId: Long) {
-        val connection = connections.remove(requestId) ?: return
-        runCatching { connection.disconnect() }
+        calls.remove(requestId)?.cancel()
+    }
+
+    private fun buildClient(
+        proxyConfig: ProxyConfig,
+        plan: ProxyPlan,
+        timeoutMillis: Long
+    ): OkHttpClient {
+        val builder = OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
+            // Never reuse a tunnel across requests: the same proxy address may be
+            // configured with different credentials for different providers.
+            .connectionPool(ConnectionPool(0, 1, TimeUnit.MILLISECONDS))
+            .connectTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+            .readTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+            .writeTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+            .callTimeout(timeoutMillis, TimeUnit.MILLISECONDS)
+        when (plan) {
+            ProxyPlan.Direct -> builder.proxy(Proxy.NO_PROXY)
+            is ProxyPlan.Proxied -> {
+                builder.proxy(plan.proxy)
+                plan.credentials?.let { credentials ->
+                    builder.proxyAuthenticator { _, response ->
+                        // Only answer the first challenge; otherwise OkHttp would
+                        // retry endlessly when the credentials are wrong.
+                        if (response.code == 407 && response.priorResponse == null) {
+                            response.request.newBuilder()
+                                .header(
+                                    "Proxy-Authorization",
+                                    Credentials.basic(
+                                        credentials.username,
+                                        credentials.password
+                                    )
+                                )
+                                .build()
+                        } else {
+                            null
+                        }
+                    }
+                }
+            }
+
+            is ProxyPlan.Failure -> error("unreachable proxy plan")
+        }
+        return builder.build()
     }
 
     /**
@@ -198,9 +308,10 @@ class CloudPinyinHttpClient(
     ) {
         Log.w(
             TAG,
-            "provider=${backend.id} request=$requestId " +
-                "status=${httpCode ?: "-"} reason=${reason.name.lowercase()} " +
-                "detail=${detail ?: "-"} elapsed=${System.currentTimeMillis() - started}"
+            "provider=${backend.id} proxy=${backend.proxy.logLabel} " +
+                "request=$requestId status=${httpCode ?: "-"} " +
+                "reason=${reason.name.lowercase()} detail=${detail ?: "-"} " +
+                "elapsed=${System.currentTimeMillis() - started}"
         )
     }
 
