@@ -214,6 +214,11 @@ class PluginFragment : PaddingPreferenceFragment() {
                                 startPluginSettingsActivity(descriptor)
                             }
                         }
+                        if (enabled) {
+                            addPreference(R.string.plugin_about) {
+                                startPluginAboutActivity(descriptor.packageName)
+                            }
+                        }
                     }
                 }
             }
