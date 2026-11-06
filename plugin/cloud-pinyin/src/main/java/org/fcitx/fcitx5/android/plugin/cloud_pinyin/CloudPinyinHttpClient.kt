@@ -283,6 +283,12 @@ class CloudPinyinHttpClient(
             val message = e.message.orEmpty()
             val reason = when {
                 !proxy.enabled -> CloudPinyinFailure.Network
+                // SOCKS5 authentication is not implemented, so a proxy that demands it
+                // is reported as unsupported rather than as a generic network failure.
+                proxy.kind == ProxyKind.Socks5 &&
+                    "authentication" in message.lowercase() ->
+                    CloudPinyinFailure.ProxyAuthUnsupported
+
                 "407" in message -> CloudPinyinFailure.ProxyAuth
                 "authenticate" in message.lowercase() -> CloudPinyinFailure.ProxyAuth
                 else -> CloudPinyinFailure.ProxyNetwork
