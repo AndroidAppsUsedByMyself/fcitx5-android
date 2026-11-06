@@ -79,10 +79,23 @@ public:
 private:
     static constexpr long int LOADING_TIME_QUICK_THRESHOLD = 1000;
 
+    /**
+     * Android-only metadata: `CandidateWord` has no extensible field, so a filled
+     * cloud result carries a marker in its comment. The Android frontend strips it
+     * and exposes it as CandidateWord::fromCloud, which draws the cloud badge.
+     * Never rendered as text.
+     */
+    static constexpr const char *ANDROID_CLOUD_MARKER = "\x01" "cloud";
+
+    void markAndroidCloudCandidate(bool fromCloud) {
+        setComment(fcitx::Text(fromCloud ? ANDROID_CLOUD_MARKER : ""));
+    }
+
     void fill(const std::string &hanzi) {
         setText(fcitx::Text(hanzi));
         word_ = hanzi;
         filled_ = true;
+        markAndroidCloudCandidate(!hanzi.empty());
         if (!constructor_) {
             update();
         }
@@ -138,6 +151,7 @@ private:
                 } else {
                     setText(fcitx::Text("\xe2\x98\x81"));
                     word_ = std::string();
+                    markAndroidCloudCandidate(false);
                     setPlaceHolder(!keep_);
                 }
             }

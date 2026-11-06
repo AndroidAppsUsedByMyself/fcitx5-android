@@ -6,6 +6,8 @@
 package org.fcitx.fcitx5.android.input.candidates
 
 import android.content.Context
+import android.view.Gravity
+import android.view.View
 import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import org.fcitx.fcitx5.android.core.CandidateWord
@@ -13,6 +15,7 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.AutoScaleTextView
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
 import org.fcitx.fcitx5.android.utils.pressHighlightDrawable
+import splitties.dimensions.dp
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.add
 import splitties.views.dsl.core.lParams
@@ -31,6 +34,10 @@ class CandidateItemUi(override val ctx: Context, val theme: Theme) : Ui {
         setTextColor(theme.candidateTextColor)
     }
 
+    private val badge = view(::CloudBadgeView) {
+        visibility = View.GONE
+    }
+
     override val root = view(::CustomGestureView) {
         background = pressHighlightDrawable(theme.keyPressHighlightColor)
 
@@ -41,6 +48,11 @@ class CandidateItemUi(override val ctx: Context, val theme: Theme) : Ui {
 
         add(text, lParams(wrapContent, matchParent) {
             gravity = gravityCenter
+        })
+        add(badge, lParams(ctx.dp(10), ctx.dp(10)) {
+            gravity = Gravity.TOP or Gravity.END
+            topMargin = ctx.dp(2)
+            rightMargin = ctx.dp(2)
         })
     }
 
@@ -60,5 +72,9 @@ class CandidateItemUi(override val ctx: Context, val theme: Theme) : Ui {
                 }
             }
         }
+        // Reserve room for the badge so it never covers a single character.
+        text.setPadding(0, 0, if (candidate.fromCloud) ctx.dp(12) else 0, 0)
+        badge.badgeColor = altFg
+        badge.visibility = if (candidate.fromCloud) View.VISIBLE else View.GONE
     }
 }

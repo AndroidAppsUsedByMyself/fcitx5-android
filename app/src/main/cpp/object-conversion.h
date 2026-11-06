@@ -180,7 +180,8 @@ jobject candidateEntityToObject(JNIEnv *env, const CandidateEntity &c) {
                               *JString(env, c.label),
                               *JString(env, c.text),
                               *JString(env, c.comment),
-                              c.spaceBetweenComment
+                              c.spaceBetweenComment,
+                              c.fromCloud
     );
     return obj;
 }

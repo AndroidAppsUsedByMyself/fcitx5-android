@@ -9,7 +9,9 @@ data class CandidateWord @JvmOverloads constructor(
     val label: String,
     val text: String,
     val comment: String,
-    val spaceBetweenComment: Boolean = true
+    val spaceBetweenComment: Boolean = true,
+    /** Candidate produced by cloud pinyin; drives the badge drawn by the UI. */
+    val fromCloud: Boolean = false
 ) {
     fun textWithComment(): String {
         return buildString {

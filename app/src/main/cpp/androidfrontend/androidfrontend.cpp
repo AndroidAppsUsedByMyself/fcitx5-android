@@ -301,14 +301,30 @@ private:
         return filterText(orig).toString();
     }
 
+    // Keep in sync with ANDROID_CLOUD_MARKER in the downstream cloudpinyin
+    // override header. Filled cloud candidates carry it in their comment.
+    static inline const std::string kCloudCandidateMarker = std::string("\x01") + "cloud";
+
+    inline bool takeCloudMarker(std::string &comment) {
+        if (comment != kCloudCandidateMarker) {
+            return false;
+        }
+        comment.clear();
+        return true;
+    }
+
     CandidateEntity candidateEntity(const CandidateWord &candidate) {
-        return CandidateEntity("", filterString(candidate.text()),
-                               filterString(candidate.comment()), candidate.spaceBetweenComment());
+        auto comment = filterString(candidate.comment());
+        bool fromCloud = takeCloudMarker(comment);
+        return CandidateEntity("", filterString(candidate.text()), std::move(comment),
+                               candidate.spaceBetweenComment(), fromCloud);
     }
 
     CandidateEntity candidateEntityWithLabel(const Text &label, const CandidateWord &candidate) {
-        return CandidateEntity(filterString(label), filterString(candidate.text()),
-                               filterString(candidate.comment()), candidate.spaceBetweenComment());
+        auto comment = filterString(candidate.comment());
+        bool fromCloud = takeCloudMarker(comment);
+        return CandidateEntity(filterString(label), filterString(candidate.text()), std::move(comment),
+                               candidate.spaceBetweenComment(), fromCloud);
     }
 };
 

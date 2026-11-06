@@ -113,19 +113,30 @@ public:
     std::string text;
     std::string comment;
     bool spaceBetweenComment;
+    bool fromCloud;
 
     explicit CandidateEntity(std::string label, std::string text, std::string comment) :
             label(std::move(label)),
             text(std::move(text)),
             comment(std::move(comment)),
-            spaceBetweenComment(true) {}
+            spaceBetweenComment(true),
+            fromCloud(false) {}
 
     explicit CandidateEntity(std::string label, std::string text, std::string comment, bool spaceBetweenComment)
             :
             label(std::move(label)),
             text(std::move(text)),
             comment(std::move(comment)),
-            spaceBetweenComment(spaceBetweenComment) {}
+            spaceBetweenComment(spaceBetweenComment),
+            fromCloud(false) {}
+
+    explicit CandidateEntity(std::string label, std::string text, std::string comment, bool spaceBetweenComment,
+                             bool fromCloud) :
+            label(std::move(label)),
+            text(std::move(text)),
+            comment(std::move(comment)),
+            spaceBetweenComment(spaceBetweenComment),
+            fromCloud(fromCloud) {}
 };
 
 class PagedCandidateEntity {
