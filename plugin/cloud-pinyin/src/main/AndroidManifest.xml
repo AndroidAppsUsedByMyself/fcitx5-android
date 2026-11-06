@@ -9,7 +9,9 @@
 
     <application
         android:icon="@mipmap/ic_launcher_plugin_generic"
-        android:label="@string/app_name">
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
+        tools:targetApi="33">
         <!--
             Guarded by the host's signature permission so only the host can bind.
             No IPC permission is requested: this plugin never calls back into the host.
@@ -28,8 +30,9 @@
         <activity
             android:name=".CloudPinyinSettingsActivity"
             android:exported="true"
+            android:label="@string/settings_title"
             android:permission="${mainApplicationId}.permission.PLUGIN"
-            android:label="@string/settings_title">
+            android:theme="@style/PluginSettingsTheme">
             <intent-filter>
                 <action android:name="${mainApplicationId}.plugin.SETTINGS" />
             </intent-filter>

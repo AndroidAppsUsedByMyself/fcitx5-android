@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name_release">Fcitx5 云拼音</string>
+    <string name="app_name_debug">Fcitx5 云拼音（调试版）</string>
+    <string name="description">云拼音候选来源</string>
+    <string name="settings_title">云拼音设置</string>
+    <string name="provider_google_cn">Google 中国（推荐）</string>
+    <string name="provider_google">Google 输入工具</string>
+    <string name="provider_baidu">百度在线拼音</string>
+    <string name="provider_custom">自定义端点</string>
+    <string name="settings_providers_title">供应商（优先级从上到下）</string>
+    <string name="settings_providers_empty">未配置任何供应商。云拼音不会发送请求。</string>
+    <string name="settings_add_provider">添加供应商</string>
+    <string name="settings_provider_up">↑</string>
+    <string name="settings_provider_down">↓</string>
+    <string name="settings_provider_remove">✕</string>
+    <string name="settings_provider_duplicate">该供应商已在列表中。</string>
+    <string name="settings_fallback_title">失败时回退到下一个供应商</string>
+    <string name="settings_fallback_warning">默认关闭。开启后，将按列表顺序依次尝试，直到某个供应商返回候选。这会增加延迟，可能把同一段拼音发送给多个第三方，且不同供应商可能返回不同的候选。</string>
+    <string name="settings_custom_edit">地址</string>
+    <string name="settings_custom_url_title">自定义端点地址</string>
+    <string name="settings_custom_url_contract">仅支持 HTTPS GET。拼音会作为查询参数 q 追加到地址后。响应必须是 UTF-8 JSON，形如 {\"candidates\":[\"…\"]}，最大 4KB；取第一个非空字符串。</string>
+    <string name="settings_custom_url_invalid">请输入不含 fragment 的有效 HTTPS 地址。</string>
+    <string name="settings_save">保存</string>
+    <string name="settings_disclaimer">这些第三方端点没有官方 SLA，可能随时停止服务。仅在发起查询时，拼音文本才会发送给列表中的供应商。</string>
+</resources>
