@@ -56,5 +56,15 @@ option(ENABLE_CLOUDPINYIN "" OFF)
 # prefer OpenCC_DIR rather than fcitx5-chinese-addons/cmake/FindOpenCC.cmake
 set(CMAKE_FIND_PACKAGE_PREFER_CONFIG ON)
 add_subdirectory(fcitx5-chinese-addons)
+
+# Downstream override: the upstream cloudpinyin candidate keeps a placeholder when an
+# empty/duplicate result arrives after 1s. Force-include our patched header (same include
+# guard) so the pinyin target compiles the corrected cleanup path without editing the
+# submodule.
+if (TARGET pinyin)
+    target_compile_options(pinyin PRIVATE
+            "-include" "${CMAKE_CURRENT_SOURCE_DIR}/android-patches/cloudpinyin_public.h")
+endif()
+
 # rename to include executable in apk
 set_target_properties(scel2org5 PROPERTIES OUTPUT_NAME libscel2org5.so)
