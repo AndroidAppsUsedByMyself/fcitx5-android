@@ -8,22 +8,27 @@ package org.fcitx.fcitx5.android.input.candidates.expanded
 import android.view.ViewGroup
 import androidx.paging.PagingDataAdapter
 import androidx.recyclerview.widget.DiffUtil
-import org.fcitx.fcitx5.android.core.CandidateWord
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.candidates.CandidateItemUi
 import org.fcitx.fcitx5.android.input.candidates.CandidateViewHolder
 
 open class PagingCandidateViewAdapter(val theme: Theme) :
-    PagingDataAdapter<CandidateWord, CandidateViewHolder>(diffCallback) {
+    PagingDataAdapter<IndexedCandidate, CandidateViewHolder>(diffCallback) {
 
     companion object {
         /**
-         * Always re-bind all [CandidateViewHolder]s every time to make sure `idx` is up-to-date.
-         * [CandidateViewHolder.update] would skip unnecessary UI updates.
+         * Identify items by their absolute index so that unchanged candidates survive
+         * a refresh in place, and only the candidates that actually changed are
+         * re-bound. This keeps the scrolling position of the expanded candidate
+         * window when the list is refreshed (e.g. while a cloud pinyin request is in
+         * flight), instead of replacing every item.
          */
-        private val diffCallback = object : DiffUtil.ItemCallback<CandidateWord>() {
-            override fun areItemsTheSame(oldItem: CandidateWord, newItem: CandidateWord) = false
-            override fun areContentsTheSame(oldItem: CandidateWord, newItem: CandidateWord) = false
+        private val diffCallback = object : DiffUtil.ItemCallback<IndexedCandidate>() {
+            override fun areItemsTheSame(oldItem: IndexedCandidate, newItem: IndexedCandidate) =
+                oldItem.index == newItem.index
+
+            override fun areContentsTheSame(oldItem: IndexedCandidate, newItem: IndexedCandidate) =
+                oldItem.candidate == newItem.candidate
         }
     }
 
@@ -40,7 +45,11 @@ open class PagingCandidateViewAdapter(val theme: Theme) :
     }
 
     override fun onBindViewHolder(holder: CandidateViewHolder, position: Int) {
-        val candidate = getItem(position) ?: CandidateWord.Empty
-        holder.update(position + offset, candidate)
+        val item = getItem(position)
+        if (item == null) {
+            holder.clear()
+        } else {
+            holder.update(item.index, item.candidate)
+        }
     }
 }

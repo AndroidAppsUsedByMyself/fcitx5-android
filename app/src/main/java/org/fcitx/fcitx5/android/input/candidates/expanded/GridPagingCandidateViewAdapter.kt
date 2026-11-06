@@ -33,7 +33,7 @@ abstract class GridPagingCandidateViewAdapter(theme: Theme) : PagingCandidateVie
     }
 
     fun measureWidth(position: Int): Float {
-        val candidate = getItem(position) ?: return 0f
+        val candidate = getItem(position)?.candidate ?: return 0f
         return measuredWidths[candidate.textWithComment()]
     }
 

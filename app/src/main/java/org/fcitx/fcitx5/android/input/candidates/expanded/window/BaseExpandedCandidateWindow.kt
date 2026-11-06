@@ -85,6 +85,13 @@ abstract class BaseExpandedCandidateWindow<T : BaseExpandedCandidateWindow<T>> :
                 layoutManager = verticalLayoutManager()
             }
         }
+        candidateLayout.recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    flushPendingOffset()
+                }
+            }
+        })
         return candidateLayout
     }
 
@@ -132,10 +139,45 @@ abstract class BaseExpandedCandidateWindow<T : BaseExpandedCandidateWindow<T>> :
 
     private var offsetJob: Job? = null
 
+    /** Latest offset that could not be applied while the user was scrolling. */
+    private var pendingOffset: Int? = null
+
+    /** Only the first offset of an attach session should reset the scroll position. */
+    private var resetOnNextOffset = true
+
+    private fun applyOffset(offset: Int) {
+        if (offset <= 0) {
+            pendingOffset = null
+            windowManager.attachWindow(KeyboardWindow)
+            return
+        }
+        val recyclerView = candidateLayout.recyclerView
+        // Never steal the scroll focus from the user. Remember the offset and
+        // apply it once the drag/fling has settled.
+        if (recyclerView.scrollState != RecyclerView.SCROLL_STATE_IDLE) {
+            pendingOffset = offset
+            return
+        }
+        if (resetOnNextOffset) {
+            resetOnNextOffset = false
+            candidateLayout.resetPosition()
+        }
+        adapter.refreshWithOffset(offset)
+    }
+
+    private fun flushPendingOffset() {
+        val offset = pendingOffset ?: return
+        pendingOffset = null
+        applyOffset(offset)
+    }
+
     private val candidatesPager by lazy {
         Pager(
             config = PagingConfig(
-                pageSize = 48,
+                pageSize = CandidatesPagingSource.PAGE_SIZE,
+                // Keep every page the same size so that pages loaded around an anchor
+                // stay contiguous, which is required to preserve the scroll position.
+                initialLoadSize = CandidatesPagingSource.PAGE_SIZE,
                 enablePlaceholders = false
             ),
             pagingSourceFactory = {
@@ -160,15 +202,10 @@ abstract class BaseExpandedCandidateWindow<T : BaseExpandedCandidateWindow<T>> :
             it.keyActionListener = keyActionListener
         }
         updateTabs(fcitx.runImmediately { inputPanelCached.tabs })
+        resetOnNextOffset = true
+        pendingOffset = null
         offsetJob = service.lifecycleScope.launch {
-            horizontalCandidate.expandedCandidateOffset.collect {
-                if (it <= 0) {
-                    windowManager.attachWindow(KeyboardWindow)
-                } else {
-                    candidateLayout.resetPosition()
-                    adapter.refreshWithOffset(it)
-                }
-            }
+            horizontalCandidate.expandedCandidateOffset.collect { applyOffset(it) }
         }
         candidatesSubmitJob = service.lifecycleScope.launch {
             candidatesPager.flow.collectLatest {
