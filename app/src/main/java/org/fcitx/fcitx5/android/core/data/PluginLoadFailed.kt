@@ -11,6 +11,16 @@ sealed interface PluginLoadFailed {
         val existingSrc: FileSource
     ) : PluginLoadFailed
 
+    /**
+     * A resource shared by fcitx is already owned by [existingSrc].
+     */
+    data class ResourceConflict(
+        val plugin: PluginDescriptor,
+        val kind: PluginConflictKind,
+        val resource: String,
+        val existingSrc: FileSource
+    ) : PluginLoadFailed
+
     data object MissingPluginDescriptor : PluginLoadFailed
 
     data object PluginDescriptorParseError : PluginLoadFailed

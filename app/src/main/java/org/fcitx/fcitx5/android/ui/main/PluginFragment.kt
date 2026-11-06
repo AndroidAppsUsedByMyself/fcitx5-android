@@ -27,6 +27,7 @@ import org.fcitx.fcitx5.android.core.data.AddonRuntimeSnapshot
 import org.fcitx.fcitx5.android.core.data.AddonStatus
 import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.core.data.FileSource
+import org.fcitx.fcitx5.android.core.data.PluginConflictKind
 import org.fcitx.fcitx5.android.core.data.PluginDescriptor
 import org.fcitx.fcitx5.android.core.data.PluginLoadFailed
 import org.fcitx.fcitx5.android.core.data.PluginManifestActions
@@ -221,11 +222,23 @@ class PluginFragment : PaddingPreferenceFragment() {
                                 getString(R.string.missing_plugin_descriptor)
                             }
                             is PluginLoadFailed.PathConflict -> {
-                                val owner = when (reason.existingSrc) {
-                                    FileSource.Main -> getString(R.string.main_program)
-                                    is FileSource.Plugin -> reason.existingSrc.descriptor.packageName
+                                getString(
+                                    R.string.path_conflict,
+                                    reason.path,
+                                    describeSource(reason.existingSrc)
+                                )
+                            }
+                            is PluginLoadFailed.ResourceConflict -> {
+                                val text = when (reason.kind) {
+                                    PluginConflictKind.Addon -> R.string.plugin_conflict_addon
+                                    PluginConflictKind.Library -> R.string.plugin_conflict_library
+                                    PluginConflictKind.Domain -> R.string.plugin_conflict_domain
                                 }
-                                getString(R.string.path_conflict, reason.path, owner)
+                                getString(
+                                    text,
+                                    reason.resource,
+                                    describeSource(reason.existingSrc)
+                                )
                             }
                             is PluginLoadFailed.PluginAPIIncompatible -> {
                                 getString(R.string.incompatible_api, reason.api)
@@ -398,6 +411,11 @@ class PluginFragment : PaddingPreferenceFragment() {
             })
         }
         return true
+    }
+
+    private fun describeSource(src: FileSource): String = when (src) {
+        FileSource.Main -> getString(R.string.main_program)
+        is FileSource.Plugin -> src.descriptor.packageName
     }
 
 }

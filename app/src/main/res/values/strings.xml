@@ -236,6 +236,9 @@
     <string name="invalid_data_descriptor">Invalid data descriptor</string>
     <string name="incompatible_api">Incompatible API: %1$s</string>
     <string name="path_conflict">Path \"%1$s\" is already owned by %2$s</string>
+    <string name="plugin_conflict_addon">Addon \"%1$s\" is already provided by %2$s</string>
+    <string name="plugin_conflict_library">Native library \"%1$s\" is already provided by %2$s</string>
+    <string name="plugin_conflict_domain">Gettext domain \"%1$s\" is already owned by %2$s</string>
     <string name="plugin_service_unavailable">Declared service is unavailable: %1$s</string>
     <string name="plugin_asset_path_violation">Plugin asset path escapes its root: %1$s</string>
     <string name="plugin_addon_none">Merged (no addon declared)</string>

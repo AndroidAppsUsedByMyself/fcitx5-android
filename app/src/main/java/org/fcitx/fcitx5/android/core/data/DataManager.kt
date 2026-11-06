@@ -285,6 +285,20 @@ object DataManager {
         // Always add app's first
         newHierarchy.install(mainDescriptor, FileSource.Main)
 
+        // Namespaces fcitx resolves first-wins across all merged data sources
+        val conflicts = PluginConflictRegistry().apply {
+            register(
+                FileSource.Main,
+                PluginClaims(
+                    addons = PluginClaimsReader.addonNames(mainDescriptor.files.keys),
+                    libraries = PluginClaimsReader.libraryNames(
+                        appContext.applicationInfo.nativeLibraryDir
+                    ),
+                    domains = PluginClaimsReader.hostDomains
+                )
+            )
+        }
+
         val pluginAssets = mutableMapOf<String, AssetManager>()
 
         // Add enabled plugins one by one
@@ -295,6 +309,23 @@ object DataManager {
                 Timber.w("Failed to get or decode data descriptor of '${plugin.packageName}'")
                 Timber.w(it)
             }.getOrNull() ?: continue
+            val claims = PluginClaims(
+                addons = plugin.provides?.addons.orEmpty()
+                    .filter { it.isNotBlank() }.toSet() +
+                        PluginClaimsReader.addonNames(descriptor.files.keys),
+                libraries = PluginClaimsReader.libraryNames(plugin.nativeLibraryDir),
+                domains = listOfNotNull(plugin.domain).toSet()
+            )
+            conflicts.findConflict(claims)?.let { conflict ->
+                Timber.w(
+                    "Plugin '${plugin.packageName}' conflicts on ${conflict.kind} " +
+                        "'${conflict.resource}' owned by '${conflict.owner}'"
+                )
+                failedPlugins[plugin.packageName] = PluginLoadFailed.ResourceConflict(
+                    plugin, conflict.kind, conflict.resource, conflict.owner
+                )
+                continue
+            }
             try {
                 newHierarchy.install(descriptor, FileSource.Plugin(plugin))
             } catch (e: DataHierarchy.PathConflict) {
@@ -313,6 +344,7 @@ object DataManager {
                     PluginLoadFailed.AssetPathViolation(plugin, e.path)
                 continue
             }
+            conflicts.register(FileSource.Plugin(plugin), claims)
             pluginAssets[plugin.packageName] = assets
             mergedPlugins.add(plugin)
             Timber.d("Merged data hierarchy of ${plugin.packageName}")
